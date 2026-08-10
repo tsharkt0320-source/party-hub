@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>파티 게임 허브</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update, remove, get, child } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+        // 사용자 Firebase 설정
+        const firebaseConfig = {
+          apiKey: "AIzaSyBdXpecrHX8WvigjATX9HaMA4bqYe5IkUE",
+          authDomain: "mt-game-1c5b2.firebaseapp.com",
+          databaseURL: "https://mt-game-1c5b2-default-rtdb.firebaseio.com",
+          projectId: "mt-game-1c5b2",
+          storageBucket: "mt-game-1c5b2.firebasestorage.app",
+          messagingSenderId: "41914825225",
+          appId: "1:41914825225:web:15c6ef0b440abbaf1316d8"
+        };
+
+        // Initialize Firebase (Only if config is set)
+        let app, db;
+        if (firebaseConfig.apiKey) {
+            app = initializeApp(firebaseConfig);
+            db = getDatabase(app);
+            window.db = db;
+            window.firebaseRef = ref;
+            window.firebaseSet = set;
+            window.firebaseOnValue = onValue;
+            window.firebaseUpdate = update;
+            window.firebaseRemove = remove;
+            window.firebaseGet = get;
+            window.firebaseChild = child;
+        } else {
+            console.error("Firebase config is missing!");
+        }
+    </script>
+</head>
+<body>
+    <div id="app">
+        <!-- 로그인 / 방 접속 화면 -->
+        <div id="screen-login" class="screen active">
+            <h1>🎉 파티 허브 🎉</h1>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 20px;">친구들과 다양한 게임을 즐겨보세요</p>
+            <div class="input-group">
+                <input type="text" id="input-nickname" placeholder="닉네임 입력 (예: 마피아왕)" maxlength="8">
+                <input type="text" id="input-roomcode" placeholder="방 코드 (4자리 영문/숫자)" maxlength="4" style="text-transform: uppercase;">
+            </div>
+            <div class="btn-group">
+                <button id="btn-create-room" class="btn primary">방 만들기</button>
+                <button id="btn-join-room" class="btn secondary">방 접속하기</button>
+            </div>
+            <div id="login-error" class="error-text"></div>
+        </div>
+
+        <!-- 로비 화면 -->
+        <div id="screen-lobby" class="screen">
+            <h2 id="lobby-room-code-display">방 코드: <span>----</span></h2>
+            <div class="players-container">
+                <h3>접속한 플레이어 (<span id="player-count">0</span>명)</h3>
+                <ul id="player-list"></ul>
+            </div>
+            
+            <div id="host-controls" class="host-only">
+                <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <button id="btn-add-bot" class="btn secondary" style="background-color: #4b5563;">🤖 혼자 테스트용 봇 추가하기</button>
+                </div>
+                <h3>게임 선택 (방장 전용)</h3>
+                <div class="game-selector">
+                    <button class="btn game-btn" data-game="mafia">🕵️ 마피아 게임</button>
+                    <button class="btn game-btn" data-game="liar">🤥 라이어 게임</button>
+                    <button class="btn game-btn" data-game="quiz">🅰️ 초성 퀴즈</button>
+                </div>
+            </div>
+            <div id="guest-waiting" class="guest-only">
+                <p>방장이 게임을 선택할 때까지 대기해 주세요...</p>
+            </div>
+        </div>
+
+        <!-- 마피아 게임 화면 -->
+        <div id="screen-mafia" class="screen">
+            <h2>🕵️ 마피아 게임</h2>
+            <div id="mafia-content"></div>
+            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
+        </div>
+
+        <!-- 라이어 게임 화면 -->
+        <div id="screen-liar" class="screen">
+            <h2>🤥 라이어 게임</h2>
+            <div id="liar-content"></div>
+            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
+        </div>
+
+        <!-- 초성 퀴즈 화면 -->
+        <div id="screen-quiz" class="screen">
+            <h2>🅰️ 초성 퀴즈 배틀</h2>
+            <div id="quiz-content"></div>
+            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
+        </div>
+    </div>
+
+    <!-- The main logic is loaded after the body and firebase -->
+    <script src="mafia.js"></script>
+    <script src="liar.js"></script>
+    <script src="quiz.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
