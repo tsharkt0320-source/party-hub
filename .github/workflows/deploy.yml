@@ -10,5 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm install -g firebase-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 버전을 고정하지 않으면 매번 그때의 최신 버전을 받아온다.
+      # 그러다 --token 이 제거된 버전이 나오는 순간, 아무것도 안 바꿨는데 배포가 깨진다.
+      - run: npm install -g firebase-tools@13
+
       - run: firebase deploy --only hosting --project mt-game-1c5b2 --token ${{ secrets.FIREBASE_TOKEN }}
