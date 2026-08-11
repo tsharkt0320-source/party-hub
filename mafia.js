@@ -711,7 +711,16 @@ window.updateMafia = function(data) {
         html += `</div>`;
     }
 
-    if (data.isCountingDown) {
+    // 카운트다운이 끝났는데 깃발이 남아 화면을 덮는 사고를 막는다.
+    // 게임 종료 화면이나 숫자가 사라진 상태에서는 오버레이를 띄우지 않는다.
+    const countdownStale = data.mafiaState === 'game_over' || !data.countdownMsg;
+    if (data.isCountingDown && countdownStale) {
+        if (window.isHost && window.myRoom) {
+            window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom),
+                { isCountingDown: null, countdownMsg: null });
+        }
+    }
+    else if (data.isCountingDown) {
         let overlayTitle = "결과 집계 중...";
         if (data.mafiaState === 'night') overlayTitle = "모든 행동 종료! 아침이 밝아옵니다...";
         else if (data.mafiaState === 'vote') overlayTitle = "투표 완료! 결과 확인까지...";
@@ -1066,6 +1075,8 @@ window.mafiaHostAction = async function(command) {
         
         updates.mafiaState = data.hunterPendingState; // day_result or vote_result
         updates.msg = msg;
+        updates.hunterTarget = null;
+        updates.hunterPendingState = null;
         checkWin(updates, alive, data.roles, data.options);
     }
     else if (command === 'reset') {
@@ -1092,6 +1103,13 @@ window.mafiaHostAction = async function(command) {
         }
     }
     
+    // 명령이 실행됐다는 것은 카운트다운이 끝났다는 뜻이다.
+    // 명령마다 따로 지우면 하나만 빠뜨려도 오버레이가 화면을 영구히 덮는다.
+    if (!('isCountingDown' in updates)) {
+        updates.isCountingDown = null;
+        updates.countdownMsg = null;
+    }
+
     window.firebaseUpdate(roomRef, updates);
 };
 

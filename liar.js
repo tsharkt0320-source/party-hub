@@ -452,7 +452,15 @@ window.updateLiar = function(data) {
         html += `<button class="btn primary" style="width:100%; margin-top:20px;" onclick="window.liarHostAction('reset')">다시 라이어 게임 하기 (설정으로 돌아가기)</button>`;
     }
 
-    if (data.isCountingDown) {
+    // 카운트다운 깃발이 남아 화면을 덮는 사고 방지 (마피아와 동일)
+    const countdownStale = data.liarState === 'game_over' || !data.countdownMsg;
+    if (data.isCountingDown && countdownStale) {
+        if (window.isHost && window.myRoom) {
+            window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom),
+                { isCountingDown: null, countdownMsg: null });
+        }
+    }
+    else if (data.isCountingDown) {
         html += `<div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999; flex-direction:column; backdrop-filter: blur(5px);">
                     <div style="font-size:1.5rem; color:white; margin-bottom:20px;">투표 완료! 결과 확인까지...</div>
                     <div style="font-size:10rem; font-weight:bold; color:var(--primary); text-shadow: 0 0 30px var(--primary); animation: pulse 1s infinite;">
@@ -629,5 +637,11 @@ window.liarHostAction = async function(command) {
         updates.countdownMsg = null;
     }
     
+    // 명령이 실행됐다면 카운트다운은 끝난 것이다 (하나라도 빠뜨리면 화면이 멈춘다)
+    if (!('isCountingDown' in updates)) {
+        updates.isCountingDown = null;
+        updates.countdownMsg = null;
+    }
+
     window.firebaseUpdate(roomRef, updates);
 };
