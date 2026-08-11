@@ -1,87 +1,574 @@
 // liar.js
+
+const LIAR_DICTIONARY = {
+    '동물': ['호랑이', '사자', '코끼리', '기린', '원숭이', '판다', '고양이', '강아지', '악어', '하마', '펭귄', '독수리', '캥거루'],
+    '과일': ['사과', '바나나', '포도', '수박', '오렌지', '딸기', '복숭아', '파인애플', '망고', '블루베리', '참외', '자두'],
+    '직업': ['소방관', '경찰관', '의사', '교사', '개발자', '요리사', '가수', '배우', '우주비행사', '농부', '건축가', '유튜버'],
+    '음식': ['피자', '치킨', '햄버거', '초밥', '파스타', '떡볶이', '라면', '김치찌개', '짜장면', '돈까스', '삼겹살', '스테이크'],
+    '나라': ['한국', '미국', '일본', '중국', '영국', '프랑스', '독일', '이탈리아', '호주', '캐나다', '브라질', '이집트'],
+    '스포츠': ['축구', '야구', '농구', '배구', '테니스', '수영', '골프', '육상', '탁구', '배드민턴', '유도', '태권도'],
+    '가전제품': ['냉장고', '세탁기', '텔레비전', '에어컨', '청소기', '전자레인지', '선풍기', '공기청정기', '건조기', '컴퓨터']
+};
+
+const WORD_MAFIA_DICTIONARY = [
+    ['짜장면', '짬뽕'], ['사과', '배'], ['경찰', '도둑'], ['선풍기', '에어컨'], 
+    ['강아지', '고양이'], ['피자', '치킨'], ['콜라', '사이다'], ['버스', '지하철'],
+    ['노트북', '스마트폰'], ['산', '바다'], ['연필', '볼펜'], ['소주', '맥주']
+];
+
 window.updateLiar = function(data) {
     const content = document.getElementById('liar-content');
     
+    // 1. 대기실
     if (!data.liarState) {
-        if (isHost) {
-            content.innerHTML = '<button id="btn-start-liar" class="btn primary">주제 정하고 게임 시작하기</button>';
-            document.getElementById('btn-start-liar').onclick = () => {
-                const pKeys = Object.keys(players);
-                // Randomly select one liar
-                const liarId = pKeys[Math.floor(Math.random() * pKeys.length)];
-                
-                const topics = [
-                    { category: '동물', word: '기린' },
-                    { category: '직업', word: '소방관' },
-                    { category: '과일', word: '수박' }
-                ];
-                const selectedTopic = topics[Math.floor(Math.random() * topics.length)];
+        if (window.isHost) {
+            let optionsHtml = `<option value="random">🎲 완전 랜덤</option>`;
+            for (const cat in LIAR_DICTIONARY) {
+                optionsHtml += `<option value="${cat}">${cat}</option>`;
+            }
+            
+            content.innerHTML = `
+                <div class="card" style="text-align:left;">
+                    <h3 style="margin-bottom:15px;">🎭 라이어 게임 설정</h3>
+                    
+                    <div style="margin-bottom:15px;">
+                        <label style="font-weight:bold; display:block; margin-bottom:5px;">게임 모드 선택:</label>
+                        <select id="liar-mode-select" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; color:white; border:1px solid #475569;">
+                            <option value="normal" selected>🟢 일반 모드 (라이어 1명)</option>
+                            <option value="spy">🕵️ 스파이 모드 (라이어 1명 + 스파이 1명)</option>
+                            <option value="word_mafia">🤡 동상이몽 모드 (제시어 2개 부여)</option>
+                        </select>
+                        <p style="font-size:0.8rem; color:#94a3b8; margin-top:5px;" id="mode-desc">기본 라이어 게임입니다.</p>
+                    </div>
 
-                window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), {
-                    liarState: 'playing',
+                    <div style="margin-bottom:10px;" id="category-box">
+                        <label>카테고리 선택:</label>
+                        <select id="liar-category-select" style="width:100%; padding:10px; margin-top:5px; border-radius:8px; background:#1e293b; color:white; border:1px solid #475569;">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label>설명 라운드 수 (바퀴):</label>
+                        <select id="liar-rounds-select" style="width:100%; padding:10px; margin-top:5px; border-radius:8px; background:#1e293b; color:white; border:1px solid #475569;">
+                            <option value="1">1 바퀴 (빠른 진행)</option>
+                            <option value="2" selected>2 바퀴 (추천)</option>
+                            <option value="3">3 바퀴</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label>턴 넘기기 방식:</label>
+                        <select id="liar-turn-mode-select" style="width:100%; padding:10px; margin-top:5px; border-radius:8px; background:#1e293b; color:white; border:1px solid #475569;">
+                            <option value="host" selected>방장이 수동으로 넘기기</option>
+                            <option value="self">각자가 설명하고 본인이 넘기기</option>
+                            <option value="auto_5">자동으로 넘어가기 (5초)</option>
+                            <option value="auto_10">자동으로 넘어가기 (10초)</option>
+                            <option value="auto_15">자동으로 넘어가기 (15초)</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="btn-start-liar" class="btn primary" style="margin-top:15px; width:100%;">역할 배정하고 게임 시작하기</button>
+            `;
+
+            const modeSelect = document.getElementById('liar-mode-select');
+            const modeDesc = document.getElementById('mode-desc');
+            const catBox = document.getElementById('category-box');
+
+            modeSelect.onchange = () => {
+                if (modeSelect.value === 'spy') {
+                    modeDesc.innerText = "시민 중에 라이어를 돕는 스파이가 추가됩니다. (최소 4인 이상 추천)";
+                    catBox.style.display = 'block';
+                } else if (modeSelect.value === 'word_mafia') {
+                    modeDesc.innerHTML = "다수파와 소수파만 존재하며 눈치껏 다수파에 들어가도록 할 것!<br>다수파에서 소수파를 찾으면 다수파 승리! 다수파가 지적당하면 소수파 승리!";
+                    catBox.style.display = 'none';
+                } else {
+                    modeDesc.innerText = "기본 라이어 게임입니다.";
+                    catBox.style.display = 'block';
+                }
+            };
+            
+            document.getElementById('btn-start-liar').onclick = () => {
+                const pKeys = Object.keys(window.players);
+                if (pKeys.length < 3) {
+                    alert("최소 3명 이상이어야 합니다.");
+                    return;
+                }
+                
+                const mode = modeSelect.value;
+                let liarId = pKeys[Math.floor(Math.random() * pKeys.length)];
+                let spyId = null;
+                
+                if (mode === 'spy' && pKeys.length >= 4) {
+                    let available = pKeys.filter(p => p !== liarId);
+                    spyId = available[Math.floor(Math.random() * available.length)];
+                }
+
+                let selectedCat = '동상이몽';
+                let selectedWord = '';
+                let liarFakeWord = '';
+
+                if (mode === 'word_mafia') {
+                    const pair = WORD_MAFIA_DICTIONARY[Math.floor(Math.random() * WORD_MAFIA_DICTIONARY.length)];
+                    if (Math.random() > 0.5) {
+                        selectedWord = pair[0]; liarFakeWord = pair[1];
+                    } else {
+                        selectedWord = pair[1]; liarFakeWord = pair[0];
+                    }
+                } else {
+                    selectedCat = document.getElementById('liar-category-select').value;
+                    if (selectedCat === 'random') {
+                        const keys = Object.keys(LIAR_DICTIONARY);
+                        selectedCat = keys[Math.floor(Math.random() * keys.length)];
+                    }
+                    const words = LIAR_DICTIONARY[selectedCat];
+                    selectedWord = words[Math.floor(Math.random() * words.length)];
+                }
+                
+                let numRounds = parseInt(document.getElementById('liar-rounds-select').value) || 2;
+                let baseOrder = pKeys.sort(() => Math.random() - 0.5);
+                let finalOrder = [];
+                for(let i=0; i<numRounds; i++) {
+                    finalOrder = finalOrder.concat(baseOrder);
+                }
+                
+                const turnMode = document.getElementById('liar-turn-mode-select').value;
+                
+                window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+                    liarState: 'role_reveal',
+                    gameMode: mode,
                     liarId: liarId,
-                    category: selectedTopic.category,
-                    word: selectedTopic.word,
+                    spyId: spyId,
+                    category: selectedCat,
+                    word: selectedWord,
+                    liarFakeWord: liarFakeWord,
                     turnIndex: 0,
-                    turnOrder: pKeys.sort(() => Math.random() - 0.5)
+                    turnOrder: finalOrder,
+                    turnMode: turnMode,
+                    votes: null,
+                    winners: null,
+                    guessResult: null,
+                    msg: '각자의 역할을 확인하세요! 라이어는 정체를 들키지 않게 조심하세요.'
                 });
             };
         } else {
-            content.innerHTML = '<p style="text-align:center;">방장이 게임을 시작하기를 기다리고 있습니다...</p>';
+            content.innerHTML = `
+                <div style="text-align:center; margin-bottom:20px;">
+                    <h3 style="color:#fbbf24;">⏳ 방장이 설정을 고르고 있습니다...</h3>
+                </div>
+                <div class="card" style="text-align:left; font-size:0.85rem; padding:15px;">
+                    <b>📖 특수 모드 룰</b><br><br>
+                    <b>🕵️ 스파이 모드</b>: 시민 중에 라이어를 돕는 스파이가 한 명 숨어있습니다. 스파이는 라이어와 정답을 알며, 라이어에게 은밀히 힌트를 줘야 합니다. 스파이가 잡히면 즉시 시민의 승리로 끝납니다!<br><br>
+                    <b>🤡 동상이몽 모드</b>: 라이어 없이 '짜장면' 5명, '짬뽕' 1명 처럼 비슷한 단어를 받습니다. 다수파와 소수파만 존재하며 눈치껏 다수파에 들어가도록 할 것! 다수파에서 소수파를 찾으면 다수파 승리! 다수파가 지적당하면 소수파 승리!
+                </div>
+            `;
         }
         return;
     }
 
-    // Game Running
-    let isLiar = (myPlayerId === data.liarId);
-    let currentTurnId = data.turnOrder[data.turnIndex];
-    let isMyTurn = (myPlayerId === currentTurnId);
+    // 게임 진행 UI
+    let html = '';
+    const isLiar = (window.myPlayerId === data.liarId);
+    const isSpy = (window.myPlayerId === data.spyId);
     
-    let html = `
-        <div class="card">
-            <h3>카테고리: ${data.category}</h3>
-            <div class="role-title" style="color: ${isLiar ? 'var(--danger)' : 'var(--primary)'}">
-                ${isLiar ? '당신은 라이어입니다!' : `제시어: ${data.word}`}
-            </div>
-            ${isLiar ? '<p>정체를 숨기고 그럴듯하게 설명하세요.</p>' : '<p>라이어에게 들키지 않게 설명하세요.</p>'}
-        </div>
-        
-        <div class="card">
-            <h3 style="color:var(--warning)">현재 턴: ${players[currentTurnId].name}</h3>
-            ${isMyTurn ? '<p style="font-weight:bold; color:var(--success);">설명을 마치면 아래 버튼을 누르세요.</p>' : '<p>현재 턴인 플레이어가 단어를 설명 중입니다.</p>'}
-        </div>
-    `;
-
-    if (isMyTurn) {
-        html += `<button class="btn primary" onclick="nextLiarTurn(${data.turnIndex}, ${data.turnOrder.length})">설명 완료 (다음 턴으로)</button>`;
+    // 최상단 메시지
+    if (data.msg) {
+        html += `<div style="margin-bottom:15px; font-size:1.1rem; text-align:center;">${data.msg}</div>`;
     }
 
-    if (isHost) {
-        html += `<div style="margin-top:20px; text-align:center;">
-                    <button class="btn secondary" onclick="endLiarGame()">게임 강제 종료 및 결과 보기 (방장)</button>
+    // 내 역할 카드 (게임 종료 전까지 항상 보임)
+    if (data.liarState !== 'game_over') {
+        if (data.gameMode === 'word_mafia') {
+            const myWord = isLiar ? data.liarFakeWord : data.word;
+            html += `
+                <div class="card">
+                    <h3 style="color:#a855f7; margin-bottom:10px;">모드: [ 🤡 동상이몽 모드 ]</h3>
+                    <div class="role-title" style="color: var(--primary); font-size:1.8rem; margin:10px 0;">
+                        제시어: <b>${myWord}</b>
+                    </div>
+                    <p style="color:#aaa; font-size:0.9rem;">본인이 다수파인지 소수파인지 눈치껏 파악하세요!</p>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="card">
+                    <h3 style="color:#a855f7; margin-bottom:10px;">카테고리: [ ${data.category} ]</h3>
+                    <div class="role-title" style="color: ${(isLiar || isSpy) ? 'var(--danger)' : 'var(--primary)'}; font-size:1.8rem; margin:10px 0;">
+                        ${isLiar ? '당신은 🤡 라이어입니다!' : (isSpy ? '당신은 🕵️ 스파이입니다!' : `제시어: <b>${data.word}</b>`)}
+                    </div>
+                    ${isLiar ? '<p style="color:#aaa; font-size:0.9rem;">정체를 숨기고 눈치껏 아는 척 설명하세요!</p>' : ''}
+                    ${isSpy ? `<p style="color:var(--danger); font-size:0.9rem; margin-top:5px;">진짜 라이어는 <b>[${window.players[data.liarId].name}]</b>님입니다!<br>정답은 <b>[${data.word}]</b> 입니다.<br>라이어에게 은밀히 힌트를 주세요!</p>` : ''}
+                    ${(!isLiar && !isSpy) ? '<p style="color:#aaa; font-size:0.9rem;">라이어에게 들키지 않게, 하지만 시민에겐 알아듣게 설명하세요!</p>' : ''}
+                </div>
+            `;
+        }
+    }
+
+    // Phase 2: 역할 확인 (role_reveal)
+    if (data.liarState === 'role_reveal') {
+        if (window.isHost) {
+            html += `<button class="btn primary" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('start_turn')">설명 턴 시작하기</button>`;
+        } else {
+            html += `<div style="text-align:center; color:#fbbf24; margin-top:20px;">방장이 턴을 시작하기를 기다리는 중...</div>`;
+        }
+    }
+    
+    // Phase 3: 설명 턴 (turn)
+    else if (data.liarState === 'turn') {
+        const currentTurnId = data.turnOrder[data.turnIndex];
+        const isMyTurn = (window.myPlayerId === currentTurnId);
+        const turnMode = data.turnMode || 'host';
+        const isLastTurn = data.turnIndex === data.turnOrder.length - 1;
+        
+        let turnHtml = `<div class="card" style="border: 2px solid ${isMyTurn ? 'var(--warning)' : '#475569'};">
+                            <h3 style="color:${isMyTurn ? 'var(--warning)' : 'white'};">🗣️ 현재 턴: ${window.players[currentTurnId].name}</h3>`;
+        
+        if (turnMode.startsWith('auto_')) {
+            let autoSec = parseInt(turnMode.split('_')[1]);
+            turnHtml += `<div style="margin-top:15px;">
+                            <div style="width:100%; height:20px; background:#1e293b; border-radius:10px; overflow:hidden;">
+                                <div id="liar-turn-progress" style="width:100%; height:100%; background:var(--warning); transition: width 0.1s linear;"></div>
+                            </div>
+                         </div>
+                         <p style="color:#aaa; margin-top:10px; text-align:center;">자동으로 턴이 넘어갑니다...</p>`;
+            
+            // Start local countdown for visuals
+            if (window.liarTurnInterval) clearInterval(window.liarTurnInterval);
+            let startTime = data.turnStartTime || Date.now();
+            let duration = autoSec * 1000;
+            window.liarTurnInterval = setInterval(() => {
+                let bar = document.getElementById('liar-turn-progress');
+                if (bar) {
+                    let elapsed = Date.now() - startTime;
+                    let p = Math.max(0, 100 - (elapsed / duration) * 100);
+                    bar.style.width = p + '%';
+                    if (elapsed > duration) clearInterval(window.liarTurnInterval);
+                } else {
+                    clearInterval(window.liarTurnInterval);
+                }
+            }, 50);
+            
+            // Host is responsible for actually triggering next_turn
+            if (window.isHost) {
+                if (window.liarHostTimeout) clearTimeout(window.liarHostTimeout);
+                let remaining = Math.max(0, duration - (Date.now() - startTime));
+                window.liarHostTimeout = setTimeout(() => {
+                    window.liarHostAction('next_turn');
+                }, remaining);
+            }
+        } else if (turnMode === 'self') {
+            turnHtml += isMyTurn ? `<p style="font-weight:bold; color:var(--success); margin-top:10px;">말로 설명을 마치면 직접 다음 버튼을 누르세요!</p>
+                                    <button class="btn primary" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('next_turn')">${isLastTurn ? '설명 끝내고 투표로 가기' : '다음 사람 턴으로 넘기기'}</button>` 
+                                 : `<p style="color:#aaa; margin-top:10px;">현재 턴인 플레이어가 단어를 설명 중입니다.</p>`;
+        } else {
+            // host mode
+            turnHtml += isMyTurn ? `<p style="font-weight:bold; color:var(--success); margin-top:10px;">말로 설명을 마쳤다면 방장에게 넘겨달라고 하세요!</p>` 
+                                 : `<p style="color:#aaa; margin-top:10px;">현재 턴인 플레이어가 단어를 설명 중입니다.</p>`;
+        }
+        
+        turnHtml += `</div>`;
+        html += turnHtml;
+        
+        if (window.isHost && turnMode === 'host') {
+            html += `<button class="btn primary" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('next_turn')">${isLastTurn ? '모든 설명 종료하고 투표로 가기' : '다음 사람 턴으로 넘기기'}</button>`;
+        }
+        if (window.isHost && turnMode !== 'host') {
+            html += `<button class="btn secondary" style="width:100%; margin-top:15px; background-color:#ef4444;" onclick="window.liarHostAction('next_turn')">방장 권한으로 강제 넘기기</button>`;
+        }
+    }
+    
+    // Phase 4: 투표 (vote)
+    else if (data.liarState === 'vote') {
+        const myVote = (data.votes && data.votes[window.myPlayerId]) || null;
+        
+        html += `<div class="vote-list">`;
+        Object.keys(window.players).forEach(pId => {
+            const isSelected = myVote === pId;
+            html += `<button class="vote-btn ${isSelected ? 'selected' : ''}" onclick="window.submitLiarAction('voteTarget', '${pId}')">
+                ${window.players[pId].name}
+            </button>`;
+        });
+        html += `</div>`;
+        
+        if (window.isHost) {
+            html += `<button class="btn danger" style="width:100%; margin-top:20px;" onclick="window.liarHostAction('resolve_vote')">투표 종료 및 결과 확인 (수동)</button>`;
+            
+            // Auto-resolve if everyone voted
+            if (data.votes && Object.keys(data.votes).length === Object.keys(window.players).length && !data.isCountingDown) {
+                window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { isCountingDown: true, countdownMsg: 3 });
+                let cnt = 3;
+                if (window.autoResolveInterval) clearInterval(window.autoResolveInterval);
+                window.autoResolveInterval = setInterval(() => {
+                    cnt--;
+                    if (cnt > 0) {
+                        window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { countdownMsg: cnt });
+                    } else {
+                        clearInterval(window.autoResolveInterval);
+                        window.liarHostAction('resolve_vote');
+                    }
+                }, 1000);
+            }
+        }
+    }
+    
+    // Phase 5: 라이어의 추측 (liar_guess)
+    else if (data.liarState === 'liar_guess') {
+        // 스파이가 죽었든, 라이어가 죽었든 무조건 '진짜 라이어' 본인이 정답을 맞춤
+        if (window.myPlayerId === data.liarId) {
+            html += `
+                <div class="card" style="border:2px solid var(--danger);">
+                    <h3 style="color:var(--danger); margin-bottom:15px;">🚨 정체가 탄로 났거나, 동료(스파이)가 죽었습니다!</h3>
+                    <p style="margin-bottom:15px;">마지막 기회입니다. 다수파의 진짜 제시어는 무엇일까요?</p>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <input type="text" id="liar-guess-input" placeholder="정답 입력..." style="padding:15px; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1.2rem; text-align:center;">
+                        <button class="btn primary" onclick="submitLiarGuess()" style="padding:15px; font-size:1.1rem;">정답 외치기!</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            html += `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 다수파의 진짜 정답을 고민하고 있습니다... (방어 실패를 기도하세요!)</div>`;
+            if (window.isHost) {
+                html += `<button class="btn danger" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('timeout_guess')">시간 초과 (강제 오답 처리)</button>`;
+            }
+        }
+    }
+    
+    // Phase 6: 게임 종료 (game_over)
+    else if (data.liarState === 'game_over') {
+        let winHtml = '';
+        if (data.winners === 'liar') {
+            winHtml = `<div class="card" style="border: 2px solid var(--danger); text-align:center;">
+                <h1 style="color:var(--danger); font-size:2.5rem; margin-bottom:10px;">🤡 라이어/소수파 팀 승리!</h1>
+                ${data.guessResult === 'correct' ? '<p>라이어가 다수파의 단어를 맞혔습니다!</p>' : '<p>시민들이 엉뚱한 사람을 투표했습니다!</p>'}
+            </div>`;
+        } else {
+            winHtml = `<div class="card" style="border: 2px solid var(--primary); text-align:center;">
+                <h1 style="color:var(--primary); font-size:2.5rem; margin-bottom:10px;">👮 시민/다수파 승리!</h1>
+                <p>라이어가 정답을 맞추지 못하고 무너졌습니다!</p>
+            </div>`;
+        }
+        
+        html += winHtml;
+        html += `<div class="card" style="margin-top:15px; text-align:center;">
+            <p>다수파 단어: <b>${data.word}</b></p>
+            ${data.gameMode === 'word_mafia' ? `<p>소수파 단어: <b>${data.liarFakeWord}</b></p>` : ''}
+            <p style="margin-top:10px;">라이어(소수파): <b>${window.players[data.liarId].name}</b></p>
+            ${data.spyId ? `<p>스파이: <b>${window.players[data.spyId].name}</b></p>` : ''}
+        </div>`;
+    }
+
+    // 투표 결과 요약표 (liar_guess, game_over 단계에서 투표 데이터가 있을 경우 표시)
+    if (data.votes && (data.liarState === 'liar_guess' || data.liarState === 'game_over')) {
+        let counts = {};
+        Object.keys(data.votes).forEach(voter => {
+            let t = data.votes[voter];
+            if (!counts[t]) counts[t] = [];
+            counts[t].push(voter);
+        });
+        
+        let voteSummaryHtml = `
+            <div class="card" style="margin-top:15px; overflow-x:auto;">
+                <h3 style="margin-bottom:10px; color:#fbbf24;">🗳️ 투표 결과 요약</h3>
+                <table style="width:100%; text-align:left; border-collapse: collapse; font-size:0.95rem;">
+                    <tr style="border-bottom:1px solid #475569; background:rgba(255,255,255,0.05);">
+                        <th style="padding:10px;">지목당한 사람 (득표수)</th>
+                        <th style="padding:10px;">투표한 사람</th>
+                    </tr>
+        `;
+        
+        let sortedTargets = Object.keys(counts).sort((a,b) => counts[b].length - counts[a].length);
+        sortedTargets.forEach(t => {
+            let votersName = counts[t].map(vid => window.players[vid].name).join(', ');
+            voteSummaryHtml += `
+                <tr style="border-bottom:1px solid #334155;">
+                    <td style="padding:10px;"><b>${window.players[t].name}</b> <span style="color:var(--danger)">(${counts[t].length}표)</span></td>
+                    <td style="padding:10px; color:#cbd5e1;">${votersName}</td>
+                </tr>
+            `;
+        });
+        voteSummaryHtml += `</table></div>`;
+        html += voteSummaryHtml;
+    }
+
+    // 게임 오버 시 다시하기 버튼은 항상 맨 아래에
+    if (data.liarState === 'game_over' && window.isHost) {
+        html += `<button class="btn primary" style="width:100%; margin-top:20px;" onclick="window.liarHostAction('reset')">다시 라이어 게임 하기 (설정으로 돌아가기)</button>`;
+    }
+
+    if (data.isCountingDown) {
+        html += `<div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999; flex-direction:column; backdrop-filter: blur(5px);">
+                    <div style="font-size:1.5rem; color:white; margin-bottom:20px;">투표 완료! 결과 확인까지...</div>
+                    <div style="font-size:10rem; font-weight:bold; color:var(--primary); text-shadow: 0 0 30px var(--primary); animation: pulse 1s infinite;">
+                        ${data.countdownMsg}
+                    </div>
                  </div>`;
     }
 
     content.innerHTML = html;
 };
 
-window.nextLiarTurn = function(currentIndex, totalPlayers) {
-    let nextIndex = currentIndex + 1;
-    if (nextIndex >= totalPlayers) {
-        // All players explained, time to vote
-        alert("모든 플레이어의 설명이 끝났습니다. 오프라인으로 토론 후 라이어를 지목하세요!");
-        nextIndex = 0; // Loop or change state to 'voting'
+// Player Action
+window.submitLiarAction = function(actionKey, value) {
+    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
+    if (actionKey === 'voteTarget') {
+        window.firebaseUpdate(window.firebaseChild(roomRef, 'votes'), { [window.myPlayerId]: value });
     }
+};
+
+window.submitLiarGuess = function() {
+    const input = document.getElementById('liar-guess-input');
+    if (!input || !input.value.trim()) return;
     
-    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), {
-        turnIndex: nextIndex
+    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
+    
+    window.firebaseGet(roomRef).then(snapshot => {
+        const data = snapshot.val();
+        let guess = input.value.trim().replace(/\s/g, ''); // 띄어쓰기 제거 후 비교
+        let actual = data.word.replace(/\s/g, '');
+        
+        if (guess === actual) {
+            window.firebaseUpdate(roomRef, {
+                liarState: 'game_over',
+                winners: 'liar',
+                guessResult: 'correct',
+                msg: `<b>${window.players[data.liarId].name}</b>(라이어)가 다수파의 단어 <b>[${input.value.trim()}]</b>(을)를 맞혔습니다! 소름! 😱`
+            });
+        } else {
+            window.firebaseUpdate(roomRef, {
+                liarState: 'game_over',
+                winners: 'citizen',
+                guessResult: 'wrong',
+                msg: `<b>${window.players[data.liarId].name}</b>(라이어)가 오답 <b>[${input.value.trim()}]</b>(을)를 외치고 장렬히 전사했습니다! 🤣`
+            });
+        }
     });
 };
 
-window.endLiarGame = function() {
-    // Show results
-    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), {
-        liarState: null // Reset
-    });
-    alert("게임 종료! (실제로는 결과창 화면으로 넘어가야 합니다)");
+// Host Action
+window.liarHostAction = async function(command) {
+    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
+    let snapshot = await window.firebaseGet(roomRef);
+    const data = snapshot.val();
+    let updates = {};
+
+    if (command === 'start_turn') {
+        updates.liarState = 'turn';
+        updates.turnStartTime = Date.now(); // For auto timer sync
+        updates.msg = '제시어를 눈치껏 설명하세요! 너무 정확하게 말하면 라이어가 눈치챕니다.';
+    }
+    else if (command === 'next_turn') {
+        if (window.liarHostTimeout) clearTimeout(window.liarHostTimeout); // clear any pending auto timeouts
+        if (data.turnIndex < data.turnOrder.length - 1) {
+            updates.turnIndex = data.turnIndex + 1;
+            updates.turnStartTime = Date.now(); // Reset timer for next turn
+        } else {
+            updates.liarState = 'vote';
+            updates.msg = '모든 사람의 설명이 끝났습니다. 누가 의심스러운지 투표하세요!';
+            
+            let botVotes = {};
+            const pKeys = Object.keys(window.players);
+            pKeys.forEach(pId => {
+                if (window.players[pId].isBot) {
+                    botVotes[pId] = pKeys[Math.floor(Math.random() * pKeys.length)];
+                }
+            });
+            if (Object.keys(botVotes).length > 0) updates.votes = botVotes;
+        }
+    }
+    else if (command === 'resolve_vote') {
+        updates.isCountingDown = null;
+        updates.countdownMsg = null;
+        const votes = data.votes || {};
+        let counts = {};
+        Object.keys(votes).forEach(voter => {
+            const target = votes[voter];
+            counts[target] = (counts[target] || 0) + 1;
+        });
+        
+        let maxVotes = 0;
+        let accusedId = null;
+        let tie = false;
+        
+        for (const [id, count] of Object.entries(counts)) {
+            if (count > maxVotes) { maxVotes = count; accusedId = id; tie = false; } 
+            else if (count === maxVotes) { tie = true; }
+        }
+        
+        if (tie || !accusedId) {
+            updates.msg = "동표이거나 기권이 많아 아무도 지목되지 않았습니다. 투표를 다시 진행해 주세요!";
+            updates.votes = null;
+            let botVotes = {};
+            const pKeys = Object.keys(window.players);
+            pKeys.forEach(pId => {
+                if (window.players[pId].isBot) {
+                    botVotes[pId] = pKeys[Math.floor(Math.random() * pKeys.length)];
+                }
+            });
+            if (Object.keys(botVotes).length > 0) updates.votes = botVotes;
+        } else {
+            updates.defendant = accusedId;
+            
+            if (accusedId === data.liarId) {
+                updates.liarState = 'liar_guess';
+                updates.msg = `<b>${window.players[accusedId].name}</b>님이 소수파/라이어로 검거되었습니다!<br>마지막으로 다수파의 단어를 맞출 기회를 드립니다.`;
+                
+                if (window.players[data.liarId].isBot) {
+                    // Bot Guess Logic
+                    let randomGuess = '';
+                    if (data.gameMode === 'word_mafia') {
+                        // Word Mafia 봇은 그냥 다수파 단어 맞출 확률 50%
+                        randomGuess = Math.random() > 0.5 ? data.word : "아무단어";
+                    } else {
+                        const words = LIAR_DICTIONARY[data.category] || [];
+                        randomGuess = words.length > 0 ? words[Math.floor(Math.random() * words.length)] : "모름";
+                    }
+                    
+                    if (randomGuess === data.word) {
+                        updates.liarState = 'game_over';
+                        updates.winners = 'liar';
+                        updates.guessResult = 'correct';
+                        updates.msg = `<b>${window.players[data.liarId].name}</b>(라이어 봇)가 정답 <b>[${randomGuess}]</b>(을)를 맞혔습니다! 소름! 😱`;
+                    } else {
+                        updates.liarState = 'game_over';
+                        updates.winners = 'citizen';
+                        updates.guessResult = 'wrong';
+                        updates.msg = `<b>${window.players[data.liarId].name}</b>(라이어 봇)가 오답 <b>[${randomGuess}]</b>(을)를 외치고 장렬히 전사했습니다! 🤣`;
+                    }
+                }
+            } else if (accusedId === data.spyId) {
+                updates.liarState = 'game_over';
+                updates.winners = 'citizen';
+                updates.guessResult = 'wrong';
+                updates.msg = `<b>${window.players[accusedId].name}</b>님은 스파이였습니다!<br>스파이가 꼬리를 밟혀 라이어 팀이 패배했습니다. 시민 승리! 👮`;
+            } else {
+                updates.liarState = 'game_over';
+                updates.winners = 'liar';
+                updates.msg = `<b>${window.players[accusedId].name}</b>님은 억울한 다수파 시민이었습니다!<br>선량한 시민을 죽인 죄로 라이어 팀이 승리합니다. 🤡`;
+            }
+        }
+    }
+    else if (command === 'timeout_guess') {
+        updates.liarState = 'game_over';
+        updates.winners = 'citizen';
+        updates.guessResult = 'wrong';
+        updates.msg = `시간이 초과되어 라이어 팀이 졌습니다. 시민 승리! 👮`;
+    }
+    else if (command === 'reset') {
+        updates.liarState = null;
+        updates.votes = null;
+        updates.winners = null;
+        updates.guessResult = null;
+        updates.msg = null;
+        updates.liarId = null;
+        updates.spyId = null;
+        updates.category = null;
+        updates.word = null;
+        updates.liarFakeWord = null;
+        updates.turnIndex = 0;
+        updates.turnOrder = null;
+        updates.defendant = null;
+        updates.gameMode = null;
+        updates.isCountingDown = null;
+        updates.countdownMsg = null;
+    }
+    
+    window.firebaseUpdate(roomRef, updates);
 };

@@ -9,18 +9,27 @@ let gameState = null; // "lobby", "mafia", "liar", "quiz"
 
 // DOM Elements
 const screens = {
-    login: document.getElementById('screen-login'),
+    home: document.getElementById('screen-home'),
+    create: document.getElementById('screen-create'),
+    join: document.getElementById('screen-join'),
     lobby: document.getElementById('screen-lobby'),
     mafia: document.getElementById('screen-mafia'),
     liar: document.getElementById('screen-liar'),
-    quiz: document.getElementById('screen-quiz')
+    quiz: document.getElementById('screen-quiz'),
+    minigames: document.getElementById('screen-minigames')
 };
 
-const inputNickname = document.getElementById('input-nickname');
-const inputRoomCode = document.getElementById('input-roomcode');
+const navCreate = document.getElementById('nav-create');
+const navJoin = document.getElementById('nav-join');
+const navBacks = document.querySelectorAll('.nav-back');
+
+const createNickname = document.getElementById('create-nickname');
+const joinNickname = document.getElementById('join-nickname');
+const joinRoomCode = document.getElementById('join-roomcode');
 const btnCreateRoom = document.getElementById('btn-create-room');
 const btnJoinRoom = document.getElementById('btn-join-room');
-const loginError = document.getElementById('login-error');
+const createError = document.getElementById('create-error');
+const joinError = document.getElementById('join-error');
 const lobbyRoomCodeDisplay = document.querySelector('#lobby-room-code-display span');
 const playerList = document.getElementById('player-list');
 const playerCount = document.getElementById('player-count');
@@ -35,19 +44,32 @@ function showScreen(screenName) {
 }
 
 // Generate random 4 character room code
+// Generate random 4 digit room code
 function generateRoomCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 4; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
+    return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+// Navigation
+navCreate.addEventListener('click', () => showScreen('create'));
+navJoin.addEventListener('click', () => showScreen('join'));
+navBacks.forEach(btn => btn.addEventListener('click', () => {
+    showScreen('home');
+    createError.innerText = '';
+    joinError.innerText = '';
+}));
+
+document.querySelectorAll('.leave-room-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (confirm("정말 방에서 나가시겠습니까?")) {
+            window.location.reload();
+        }
+    });
+});
+
 // Firebase Check
-function checkFirebase() {
+function checkFirebase(errorEl) {
     if (!window.db) {
-        loginError.innerText = "Firebase 설정이 필요합니다. 코드에 API 키를 넣어주세요.";
+        errorEl.innerText = "Firebase 설정이 필요합니다.";
         return false;
     }
     return true;
@@ -55,9 +77,9 @@ function checkFirebase() {
 
 // Create Room
 btnCreateRoom.addEventListener('click', async () => {
-    if (!checkFirebase()) return;
-    const nickname = inputNickname.value.trim();
-    if (!nickname) { loginError.innerText = "닉네임을 입력해주세요."; return; }
+    if (!checkFirebase(createError)) return;
+    const nickname = createNickname.value.trim();
+    if (!nickname) { createError.innerText = "닉네임을 입력해주세요."; return; }
     
     myRoom = generateRoomCode();
     myPlayerId = "host_" + Date.now();
@@ -84,12 +106,12 @@ btnCreateRoom.addEventListener('click', async () => {
 
 // Join Room
 btnJoinRoom.addEventListener('click', async () => {
-    if (!checkFirebase()) return;
-    const nickname = inputNickname.value.trim();
-    const code = inputRoomCode.value.trim().toUpperCase();
+    if (!checkFirebase(joinError)) return;
+    const nickname = joinNickname.value.trim();
+    const code = joinRoomCode.value.trim();
     
-    if (!nickname) { loginError.innerText = "닉네임을 입력해주세요."; return; }
-    if (!code || code.length !== 4) { loginError.innerText = "올바른 4자리 방 코드를 입력해주세요."; return; }
+    if (!nickname) { joinError.innerText = "닉네임을 입력해주세요."; return; }
+    if (!code || code.length !== 4) { joinError.innerText = "올바른 4자리 방 코드를 입력해주세요."; return; }
 
     const roomRef = window.firebaseRef(window.db, 'rooms/' + code);
     const snapshot = await window.firebaseGet(roomRef);
@@ -110,7 +132,7 @@ btnJoinRoom.addEventListener('click', async () => {
         
         joinRoomLogic(myRoom, nickname);
     } else {
-        loginError.innerText = "존재하지 않는 방입니다.";
+        joinError.innerText = "존재하지 않는 방입니다.";
     }
 });
 
@@ -123,9 +145,9 @@ function joinRoomLogic(code, nickname) {
     history.pushState(null, null, location.href);
     window.addEventListener('popstate', function(event) {
         if (confirm("정말 방에서 나가시겠습니까?")) {
-            // 유저가 확인을 누르면 그대로 나가게 둠
+            // 유저가 확인을 누르면 아예 화면을 새로고침해서 모든 통신을 끊고 홈으로 돌아감
             window.removeEventListener('beforeunload', handleUnload); // Prevent double trigger
-            history.back();
+            window.location.reload();
         } else {
             // 취소를 누르면 다시 현재 페이지 상태를 푸시하여 나가지 못하게 함
             history.pushState(null, null, location.href);
@@ -146,8 +168,10 @@ function joinRoomLogic(code, nickname) {
         
         players = data.players || {};
         window.players = players; // Expose to window for external scripts
+        window._isCaptain = (data.captain === myPlayerId);
         
         updatePlayerList();
+        renderTeamPicker(data);
         
         if (data.state !== gameState) {
             gameState = data.state;
@@ -158,6 +182,7 @@ function joinRoomLogic(code, nickname) {
         if (gameState === 'mafia' && typeof window.updateMafia === 'function') window.updateMafia(data);
         if (gameState === 'liar' && typeof window.updateLiar === 'function') window.updateLiar(data);
         if (gameState === 'quiz' && typeof window.updateQuiz === 'function') window.updateQuiz(data);
+        if (gameState === 'minigames' && typeof window.updateMinigames === 'function') window.updateMinigames(data);
     });
     
     // Disconnect hook
@@ -185,6 +210,82 @@ function updatePlayerList() {
     });
 }
 
+// Global Team Picker (rendered in lobby)
+function renderTeamPicker(data) {
+    const container = document.getElementById('team-picker-area');
+    if (!container) return;
+    const globalTeams = data.globalTeams || {};
+    const teamAName = data.teamAName || 'A팀';
+    const teamBName = data.teamBName || 'B팀';
+    const captain = data.captain || null;
+    const keys = Object.keys(players);
+    const teamA = keys.filter(id => (globalTeams[id] || 'A') === 'A');
+    const teamB = keys.filter(id => globalTeams[id] === 'B');
+    
+    let html = '';
+    if (isHost) {
+        html += `<div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" id="team-a-name" value="${teamAName}" placeholder="A팀 이름" style="flex:1; padding:8px; border-radius:6px; border:1px solid #3b82f6; background:rgba(59,130,246,0.1); color:white; text-align:center;" onchange="window.setTeamName('A', this.value)">
+                    <input type="text" id="team-b-name" value="${teamBName}" placeholder="B팀 이름" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ef4444; background:rgba(239,68,68,0.1); color:white; text-align:center;" onchange="window.setTeamName('B', this.value)">
+                 </div>`;
+    }
+    html += `<div style="display:flex; gap:10px; min-height:120px;">
+                <div style="flex:1; display:flex; flex-direction:column; background:rgba(59,130,246,0.1); border:2px solid #3b82f6; border-radius:12px; padding:10px;">
+                    <div style="text-align:center; font-weight:bold; color:#3b82f6; margin-bottom:8px;">${teamAName}</div>
+                    <div style="flex:1;">`;
+    teamA.forEach(id => {
+        let isCap = captain === id;
+        html += `<div style="padding:4px 8px; margin-bottom:3px; border-radius:6px; background:rgba(59,130,246,0.2); font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${players[id]?.name || id} ${id === myPlayerId ? '(나)' : ''}</span>
+                    ${isCap ? '<span style="color:#fbbf24; font-size:0.7rem;">👑팀장</span>' : ''}
+                 </div>`;
+    });
+    html += `       </div>
+                    <button class="btn primary" style="width:100%; padding:8px; font-size:0.9rem; margin-top:10px;" onclick="window.joinTeam('A')">A팀 들어가기</button>
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; background:rgba(239,68,68,0.1); border:2px solid #ef4444; border-radius:12px; padding:10px;">
+                    <div style="text-align:center; font-weight:bold; color:#ef4444; margin-bottom:8px;">${teamBName}</div>
+                    <div style="flex:1;">`;
+    teamB.forEach(id => {
+        let isCap = captain === id;
+        html += `<div style="padding:4px 8px; margin-bottom:3px; border-radius:6px; background:rgba(239,68,68,0.2); font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${players[id]?.name || id} ${id === myPlayerId ? '(나)' : ''}</span>
+                    ${isCap ? '<span style="color:#fbbf24; font-size:0.7rem;">👑팀장</span>' : ''}
+                 </div>`;
+    });
+    html += `       </div>
+                    <button class="btn danger" style="width:100%; padding:8px; font-size:0.9rem; margin-top:10px; background:#ef4444; color:white;" onclick="window.joinTeam('B')">B팀 들어가기</button>
+                </div>
+             </div>`;
+    if (isHost) {
+        html += `<div style="margin-top:10px;"><label style="color:#cbd5e1; font-size:0.85rem;">👑 팀장 지정</label>
+                    <select id="captain-select" class="input-group input" style="width:100%; padding:8px; margin-top:5px;" onchange="window.setCaptain(this.value)">
+                        <option value="">없음</option>
+                        ${keys.map(id => `<option value="${id}" ${captain===id?'selected':''}>${players[id]?.name || id}</option>`).join('')}
+                    </select>
+                 </div>`;
+    }
+    container.innerHTML = html;
+}
+
+window.joinTeam = function(team) {
+    if (!myRoom) return;
+    window.firebaseUpdate(window.firebaseChild(window.firebaseRef(window.db, 'rooms/' + myRoom), 'globalTeams'), {
+        [myPlayerId]: team
+    });
+};
+
+window.setTeamName = function(team, name) {
+    if (!isHost || !myRoom) return;
+    let key = team === 'A' ? 'teamAName' : 'teamBName';
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), { [key]: name });
+};
+
+window.setCaptain = function(pId) {
+    if (!isHost || !myRoom) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), { captain: pId || null });
+};
+
 // Host adds a bot for solo testing
 if (btnAddBot) {
     btnAddBot.addEventListener('click', () => {
@@ -207,7 +308,16 @@ gameButtons.forEach(btn => {
         if (myRoom && isHost) {
             const roomRef = window.firebaseRef(window.db, 'rooms/' + myRoom);
             // Initialize game state logic based on selected game
-            let initialGameState = { state: game };
+            let initialGameState = { 
+                state: game,
+                mafiaState: null,
+                roles: null,
+                alive: null,
+                msg: null,
+                nightActions: null,
+                votes: null,
+                winners: null
+            };
             
             // Example: simple initialization, modules will handle specific data
             window.firebaseUpdate(roomRef, initialGameState);

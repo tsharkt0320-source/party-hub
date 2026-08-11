@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>파티 게임 허브</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="referrer" content="no-referrer">
+    <title>Party Hub</title>
+    <link rel="stylesheet" href="style.css?v=8">
     
     <!-- Firebase SDKs -->
     <script type="module">
@@ -42,24 +43,48 @@
 </head>
 <body>
     <div id="app">
-        <!-- 로그인 / 방 접속 화면 -->
-        <div id="screen-login" class="screen active">
+        <!-- 홈 화면 -->
+        <div id="screen-home" class="screen active">
             <h1>🎉 파티 허브 🎉</h1>
-            <p style="font-size: 0.9rem; color: #666; margin-bottom: 20px;">친구들과 다양한 게임을 즐겨보세요</p>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 30px;">친구들과 다양한 게임을 즐겨보세요</p>
+            <div class="btn-group" style="flex-direction: column; gap: 15px;">
+                <button id="nav-create" class="btn primary" style="padding: 20px; font-size: 1.2rem;">방 만들기</button>
+                <button id="nav-join" class="btn secondary" style="padding: 20px; font-size: 1.2rem;">방 접속하기</button>
+            </div>
+        </div>
+
+        <!-- 방 만들기 화면 -->
+        <div id="screen-create" class="screen">
+            <button class="btn-float-back nav-back">◁</button>
+            <h2>방 만들기</h2>
             <div class="input-group">
-                <input type="text" id="input-nickname" placeholder="닉네임 입력 (예: 마피아왕)" maxlength="8">
-                <input type="text" id="input-roomcode" placeholder="방 코드 (4자리 영문/숫자)" maxlength="4" style="text-transform: uppercase;">
+                <input type="text" id="create-nickname" placeholder="사용할 닉네임 입력" maxlength="8">
             </div>
-            <div class="btn-group">
-                <button id="btn-create-room" class="btn primary">방 만들기</button>
-                <button id="btn-join-room" class="btn secondary">방 접속하기</button>
+            <button id="btn-create-room" class="btn primary" style="margin-top: 10px; width: 100%;">완료 및 생성</button>
+            <div id="create-error" class="error-text"></div>
+        </div>
+
+        <!-- 방 접속 화면 -->
+        <div id="screen-join" class="screen">
+            <button class="btn-float-back nav-back">◁</button>
+            <h2>방 접속하기</h2>
+            <div class="input-group">
+                <input type="text" id="join-nickname" placeholder="사용할 닉네임 입력" maxlength="8">
+                <input type="number" id="join-roomcode" placeholder="방 코드 (숫자 4자리)" pattern="\d*" maxlength="4">
             </div>
-            <div id="login-error" class="error-text"></div>
+            <button id="btn-join-room" class="btn primary" style="margin-top: 10px; width: 100%;">접속하기</button>
+            <div id="join-error" class="error-text"></div>
         </div>
 
         <!-- 로비 화면 -->
         <div id="screen-lobby" class="screen">
+            <button class="btn-float-back leave-room-btn">◁</button>
             <h2 id="lobby-room-code-display">방 코드: <span>----</span></h2>
+            
+            <div id="team-picker-area" style="margin:10px 0; padding:15px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+                <h4 style="color:#94a3b8; margin-bottom:10px; text-align:center;">⚔️ 팀 선택</h4>
+            </div>
+
             <div class="players-container">
                 <h3>접속한 플레이어 (<span id="player-count">0</span>명)</h3>
                 <ul id="player-list"></ul>
@@ -73,7 +98,8 @@
                 <div class="game-selector">
                     <button class="btn game-btn" data-game="mafia">🕵️ 마피아 게임</button>
                     <button class="btn game-btn" data-game="liar">🤥 라이어 게임</button>
-                    <button class="btn game-btn" data-game="quiz">🅰️ 초성 퀴즈</button>
+                    <button class="btn game-btn" data-game="quiz">🎉 파티 퀴즈 모음집</button>
+                    <button class="btn game-btn" data-game="minigames">🎲 복불복 미니게임</button>
                 </div>
             </div>
             <div id="guest-waiting" class="guest-only">
@@ -83,30 +109,39 @@
 
         <!-- 마피아 게임 화면 -->
         <div id="screen-mafia" class="screen">
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
             <h2>🕵️ 마피아 게임</h2>
             <div id="mafia-content"></div>
-            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
         </div>
 
         <!-- 라이어 게임 화면 -->
         <div id="screen-liar" class="screen">
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
             <h2>🤥 라이어 게임</h2>
             <div id="liar-content"></div>
-            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
         </div>
 
         <!-- 초성 퀴즈 화면 -->
         <div id="screen-quiz" class="screen">
-            <h2>🅰️ 초성 퀴즈 배틀</h2>
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
+            <h2>🎉 파티 퀴즈 모음집</h2>
             <div id="quiz-content"></div>
-            <button class="btn back-to-lobby host-only" style="margin-top: 20px;">로비로 돌아가기</button>
+        </div>
+        <!-- 복불복 미니게임 화면 -->
+        <div id="screen-minigames" class="screen">
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
+            <h2>🎲 복불복 미니게임</h2>
+            <div id="minigames-content"></div>
         </div>
     </div>
 
     <!-- The main logic is loaded after the body and firebase -->
-    <script src="mafia.js"></script>
-    <script src="liar.js"></script>
-    <script src="quiz.js"></script>
-    <script type="module" src="app.js"></script>
+    <script src="mafia.js?v=41"></script>
+    <script src="liar.js?v=41"></script>
+    <script src="quiz_db.js?v=41"></script>
+    <script src="quiz.js?v=41"></script>
+    <script src="minigames.js?v=41"></script>
+    <script type="module" src="app.js?v=41"></script>
+    <!-- Add CSS cache bust -->
 </body>
 </html>
