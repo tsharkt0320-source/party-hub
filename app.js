@@ -37,7 +37,6 @@ const playerList = document.getElementById('player-list');
 const playerCount = document.getElementById('player-count');
 const gameButtons = document.querySelectorAll('.game-btn');
 const backButtons = document.querySelectorAll('.back-to-lobby');
-const btnAddBot = document.getElementById('btn-add-bot');
 
 // Helper: Show Screen
 function showScreen(screenName) {
@@ -532,6 +531,9 @@ function updatePlayerList() {
     playerList.innerHTML = '';
     const keys = Object.keys(players);
     playerCount.innerText = keys.length;
+
+    const botCountEl = document.getElementById('bot-count'); // 테스트용 봇 표시
+    if (botCountEl) botCountEl.innerText = keys.filter(id => players[id].isBot).length;
     
     keys.forEach(id => {
         const p = players[id];
@@ -618,31 +620,39 @@ window.setCaptain = function(pId) {
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), { captain: pId || null });
 };
 
-// Host adds a bot for solo testing
-if (btnAddBot) {
-    btnAddBot.addEventListener('click', () => {
-        if (myRoom && isHost) {
-            const botId = "bot_" + Date.now();
-            const botNames = ["로봇철수", "인공지능영희", "알파고", "챗GPT", "봇돌이"];
-            const taken = new Set(Object.values(players).map(p => p.name));
+// ===== 테스트용 봇 (임시 기능) =====
+// 실제 서비스에서 뺄 때는 이 블록과 index.html 의 test-bot-tools div 만 지우면 됩니다.
+window.addBot = function() {
+    if (!myRoom || !isHost) return;
+    const botId = "bot_" + Date.now();
+    const botNames = ["로봇철수", "인공지능영희", "알파고", "챗GPT", "봇돌이"];
+    const taken = new Set(Object.values(players).map(p => p.name));
 
-            // 안 쓰인 이름부터 차례로, 다 쓰면 뒤에 번호를 붙인다
-            let botName = null;
-            for (const n of botNames) {
-                if (!taken.has(n + " (봇)")) { botName = n + " (봇)"; break; }
-            }
-            if (!botName) {
-                let n = 2;
-                while (taken.has(botNames[0] + n + " (봇)")) n++;
-                botName = botNames[0] + n + " (봇)";
-            }
+    // 안 쓰인 이름부터 차례로, 다 쓰면 뒤에 번호를 붙인다
+    let botName = null;
+    for (const n of botNames) {
+        if (!taken.has(n + " (봇)")) { botName = n + " (봇)"; break; }
+    }
+    if (!botName) {
+        let n = 2;
+        while (taken.has(botNames[0] + n + " (봇)")) n++;
+        botName = botNames[0] + n + " (봇)";
+    }
 
-            window.firebaseUpdate(window.firebaseChild(window.firebaseRef(window.db, 'rooms/' + myRoom), 'players'), {
-                [botId]: { name: botName, isHost: false, isBot: true }
-            });
-        }
+    window.firebaseUpdate(window.firebaseChild(window.firebaseRef(window.db, 'rooms/' + myRoom), 'players'), {
+        [botId]: { name: botName, isHost: false, isBot: true }
     });
-}
+};
+
+window.removeBot = function() {
+    if (!myRoom || !isHost) return;
+    // 가장 나중에 추가한 봇부터 뺀다
+    const botIds = Object.keys(players).filter(id => players[id].isBot).sort();
+    if (botIds.length === 0) return;
+    const target = botIds[botIds.length - 1];
+    window.firebaseRemove(window.firebaseRef(window.db, 'rooms/' + myRoom + '/players/' + target));
+};
+// ===== 테스트용 봇 끝 =====
 
 // Host selects game
 gameButtons.forEach(btn => {

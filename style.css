@@ -164,15 +164,28 @@ input:focus {
 
 .game-btn:nth-child(2) { background: linear-gradient(135deg, #ef4444, #f97316); }
 .game-btn:nth-child(3) { background: linear-gradient(135deg, #10b981, #3b82f6); }
+.game-btn:nth-child(4) { background: linear-gradient(135deg, #f59e0b, #ec4899); }
+
+/* 버튼 가로 배치.
+   .btn 이 width:100% 라서 그냥 flex 로 묶으면 서로 밀려 글자가 세로로 쪼개진다. */
+.btn-row { display: flex; gap: 8px; align-items: stretch; }
+.btn-row > .btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    padding: 13px 8px;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+.btn-row > .btn.wide { flex: 1.6 1 0; }
 
 /* Players List */
 .players-container {
     background: rgba(0,0,0,0.2);
     border-radius: 12px;
     padding: 15px;
-    margin-bottom: 20px;
-    flex-grow: 1;
-    overflow-y: auto;
+    margin-bottom: 18px;
+    flex-shrink: 0;   /* 화면 전체가 스크롤되므로 여기서 또 스크롤하지 않는다 */
 }
 
 #player-list {
@@ -368,4 +381,78 @@ body.is-host .guest-only { display: none; }
     40% { transform: translateX(4px)  rotate(6deg); }
     60% { transform: translateX(-3px) rotate(-4deg); }
     80% { transform: translateX(3px)  rotate(4deg); }
+}
+
+/* ===== 방장 도구 (접이식) ===== */
+.host-tools {
+    margin-top: 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.host-tools > summary {
+    padding: 13px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    color: #cbd5e1;
+    font-size: 0.95rem;
+    list-style: none;
+}
+.host-tools > summary::-webkit-details-marker { display: none; }
+.host-tools > summary::after { content: ' ▾'; color: #64748b; }
+.host-tools[open] > summary::after { content: ' ▴'; }
+.host-tools .tool-body { padding: 0 16px 16px; }
+.host-tools label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+.host-tools select {
+    width: 100%;
+    padding: 11px;
+    border-radius: 10px;
+    background: #0f172a;
+    color: #fff;
+    border: 1px solid #334155;
+    font-size: 0.95rem;
+}
+
+/* ===== 테스트용 봇 도구 (임시) =====
+   나중에 없앨 기능이라 눈에 안 띄는 구석에 둔다.
+   index.html 의 test-bot-tools 블록과 app.js 의 addBot/removeBot 만 지우면 완전히 사라진다. */
+.test-tools {
+    display: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 7px 10px;
+    border: 1px dashed #3f4a5f;
+    border-radius: 10px;
+    opacity: 0.55;
+    transition: opacity 0.2s;
+}
+.test-tools:hover { opacity: 1; }
+body.is-host .test-tools { display: flex; }
+.test-tools .tt-label { color: #64748b; font-size: 0.78rem; margin-right: auto; }
+.test-tools .tt-btn {
+    width: 30px; height: 30px;
+    border: 1px solid #475569;
+    background: #1e293b;
+    color: #cbd5e1;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+.test-tools .tt-btn:active { transform: scale(0.9); }
+.test-tools .tt-count {
+    min-width: 22px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    font-weight: bold;
 }

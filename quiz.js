@@ -358,9 +358,9 @@ window.updateQuiz = function(data) {
                     }
                 }
                 if (canControl && !data.buzzer_winner) {
-                    html += `<div style="display:flex; gap:10px; margin-top:15px;">
-                                <button class="btn primary" style="flex:1; padding:12px;" onclick="window.startQuizGame()">▶ 다음</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
+                    html += `<div class="btn-row" style="margin-top:15px;">
+                                <button class="btn primary wide" onclick="window.startQuizGame()">▶ 다음 문제</button>
+                                <button class="btn secondary" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
@@ -371,10 +371,10 @@ window.updateQuiz = function(data) {
                             <button class="btn primary" style="padding:0 20px; font-size:1.1rem;" onclick="window.submitGuess('${data.answer.replace(/'/g, "\\'")}')">확인</button>
                         </div>`;
                 if (canControl) {
-                    html += `<div style="display:flex; gap:10px; margin-top:15px;">
-                                <button class="btn primary" style="flex:1; padding:12px;" onclick="window.startQuizGame()">▶ 다음 문제</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.hostForceCorrect()" title="아무도 못 맞혔을 때 방장이 정답을 공개합니다">정답 공개</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
+                    html += `<div class="btn-row" style="margin-top:15px;">
+                                <button class="btn primary wide" onclick="window.startQuizGame()">▶ 다음 문제</button>
+                                <button class="btn secondary" onclick="window.hostForceCorrect()" title="아무도 못 맞혔을 때 방장이 정답을 공개합니다">정답 공개</button>
+                                <button class="btn secondary" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
