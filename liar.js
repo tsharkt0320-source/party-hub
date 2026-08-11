@@ -391,60 +391,106 @@ window.updateLiar = function(data) {
     
     // Phase 6: 게임 종료 (game_over)
     else if (data.liarState === 'game_over') {
-        let winHtml = '';
-        if (data.winners === 'liar') {
-            winHtml = `<div class="card" style="border: 2px solid var(--danger); text-align:center;">
-                <h1 style="color:var(--danger); font-size:2.5rem; margin-bottom:10px;">🤡 라이어/소수파 팀 승리!</h1>
-                ${data.guessResult === 'correct' ? '<p>라이어가 다수파의 단어를 맞혔습니다!</p>' : '<p>시민들이 엉뚱한 사람을 투표했습니다!</p>'}
-            </div>`;
-        } else {
-            winHtml = `<div class="card" style="border: 2px solid var(--primary); text-align:center;">
-                <h1 style="color:var(--primary); font-size:2.5rem; margin-bottom:10px;">👮 시민/다수파 승리!</h1>
-                <p>라이어가 정답을 맞추지 못하고 무너졌습니다!</p>
-            </div>`;
-        }
-        
-        html += winHtml;
+        const esc = window.escapeHtml || (x => x);
         const rv = data.revealed || { word: data.word, liarFakeWord: data.liarFakeWord, liarId: data.liarId, spyId: data.spyId };
-        html += `<div class="card" style="margin-top:15px; text-align:center;">
-            <p>다수파 단어: <b>${rv.word || '-'}</b></p>
-            ${data.gameMode === 'word_mafia' ? `<p>소수파 단어: <b>${rv.liarFakeWord || '-'}</b></p>` : ''}
-            <p style="margin-top:10px;">라이어(소수파): <b>${(window.players[rv.liarId] || {}).name || '-'}</b></p>
-            ${rv.spyId ? `<p>스파이: <b>${(window.players[rv.spyId] || {}).name || '-'}</b></p>` : ''}
-        </div>`;
+        const isWordMafia = data.gameMode === 'word_mafia';
+        const foeLabel = isWordMafia ? '소수파' : '라이어파';
+        const foeIcon  = isWordMafia ? '🎭' : '🤡';
+        const liarWon  = data.winners === 'liar';
+
+        // ── 승리 배너 (모드에 따라 이름이 달라진다) ──
+        const winLabel = liarWon ? `${foeIcon} ${foeLabel} 승리!` : '👮 시민파 승리!';
+        const winColor = liarWon ? 'var(--danger)' : 'var(--primary)';
+        let winDesc;
+        if (liarWon) {
+            winDesc = data.guessResult === 'correct'
+                ? (isWordMafia ? '소수파가 시민파의 단어를 맞혔습니다!' : '라이어가 제시어를 맞혔습니다!')
+                : '시민들이 엉뚱한 사람을 지목했습니다!';
+        } else {
+            winDesc = isWordMafia ? '시민파가 소수파를 찾아냈습니다!' : '라이어를 찾아냈습니다!';
+        }
+
+        html += `<div class="card" style="border:2px solid ${winColor}; text-align:center;">
+                    <h1 style="color:${winColor}; font-size:2.1rem; margin-bottom:8px; line-height:1.3;">${winLabel}</h1>
+                    <p style="color:#cbd5e1; font-size:0.95rem;">${winDesc}</p>
+                 </div>`;
+
+        // ── 제시어 ──
+        if (isWordMafia) {
+            html += `<div class="card" style="margin-top:12px; display:flex; gap:10px;">
+                        <div style="flex:1; padding:12px; border-radius:10px; background:rgba(59,130,246,0.12); border:1px solid #3b82f6; text-align:center;">
+                            <div style="font-size:0.8rem; color:#93c5fd; margin-bottom:4px;">시민파 단어</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#dbeafe;">${esc(rv.word || '-')}</div>
+                        </div>
+                        <div style="flex:1; padding:12px; border-radius:10px; background:rgba(239,68,68,0.12); border:1px solid #ef4444; text-align:center;">
+                            <div style="font-size:0.8rem; color:#fca5a5; margin-bottom:4px;">소수파 단어</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#fee2e2;">${esc(rv.liarFakeWord || '-')}</div>
+                        </div>
+                     </div>`;
+        } else {
+            html += `<div class="card" style="margin-top:12px; text-align:center;">
+                        <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:6px;">제시어</div>
+                        <div style="font-size:2rem; font-weight:900; color:#fbbf24;">${esc(rv.word || '-')}</div>
+                     </div>`;
+        }
+
+        // ── 팀 명단 ──
+        const foeIds = [rv.liarId].concat(rv.spyId ? [rv.spyId] : []).filter(Boolean);
+        const citizenIds = Object.keys(window.players).filter(id => foeIds.indexOf(id) === -1);
+        const chip = (id, tag, color) =>
+            `<span style="display:inline-block; margin:3px; padding:6px 12px; border-radius:999px;
+                          background:${color}22; border:1px solid ${color}; color:#f8fafc; font-size:0.9rem;">
+                ${esc((window.players[id] || {}).name || '나간 사람')}${tag ? ` <span style="color:${color}; font-size:0.75rem; font-weight:bold;">${tag}</span>` : ''}
+             </span>`;
+
+        html += `<div class="card" style="margin-top:12px; text-align:left;">
+                    <div style="margin-bottom:14px;">
+                        <div style="color:#60a5fa; font-weight:bold; margin-bottom:8px;">
+                            👮 시민파 <span style="color:#94a3b8; font-weight:normal; font-size:0.85rem;">${citizenIds.length}명</span>
+                        </div>
+                        <div>${citizenIds.map(id => chip(id, '', '#3b82f6')).join('')}</div>
+                    </div>
+                    <div style="border-top:1px solid rgba(255,255,255,0.12); padding-top:14px;">
+                        <div style="color:#f87171; font-weight:bold; margin-bottom:8px;">
+                            ${foeIcon} ${foeLabel} <span style="color:#94a3b8; font-weight:normal; font-size:0.85rem;">${foeIds.length}명</span>
+                        </div>
+                        <div>${chip(rv.liarId, isWordMafia ? '소수파' : '라이어', '#ef4444')}${rv.spyId ? chip(rv.spyId, '스파이', '#f59e0b') : ''}</div>
+                    </div>
+                 </div>`;
     }
 
-    // 투표 결과 요약표 (liar_guess, game_over 단계에서 투표 데이터가 있을 경우 표시)
+    // ── 투표 결과 (liar_guess · game_over 에서 표시) ──
     if (data.votes && (data.liarState === 'liar_guess' || data.liarState === 'game_over')) {
-        let counts = {};
+        const esc2 = window.escapeHtml || (x => x);
+        const counts = {};
         Object.keys(data.votes).forEach(voter => {
-            let t = data.votes[voter];
-            if (!counts[t]) counts[t] = [];
-            counts[t].push(voter);
+            const t = data.votes[voter];
+            (counts[t] = counts[t] || []).push(voter);
         });
-        
-        let voteSummaryHtml = `
-            <div class="card" style="margin-top:15px; overflow-x:auto;">
-                <h3 style="margin-bottom:10px; color:#fbbf24;">🗳️ 투표 결과 요약</h3>
-                <table style="width:100%; text-align:left; border-collapse: collapse; font-size:0.95rem;">
-                    <tr style="border-bottom:1px solid #475569; background:rgba(255,255,255,0.05);">
-                        <th style="padding:10px;">지목당한 사람 (득표수)</th>
-                        <th style="padding:10px;">투표한 사람</th>
-                    </tr>
-        `;
-        
-        let sortedTargets = Object.keys(counts).sort((a,b) => counts[b].length - counts[a].length);
-        sortedTargets.forEach(t => {
-            let votersName = counts[t].map(vid => window.players[vid].name).join(', ');
-            voteSummaryHtml += `
-                <tr style="border-bottom:1px solid #334155;">
-                    <td style="padding:10px;"><b>${window.players[t].name}</b> <span style="color:var(--danger)">(${counts[t].length}표)</span></td>
-                    <td style="padding:10px; color:#cbd5e1;">${votersName}</td>
-                </tr>
-            `;
+        const total = Object.keys(data.votes).length || 1;
+        const sorted = Object.keys(counts).sort((a, b) => counts[b].length - counts[a].length);
+        const maxCount = sorted.length ? counts[sorted[0]].length : 0;
+
+        let vh = `<div class="card" style="margin-top:12px; text-align:left;">
+                    <h3 style="margin-bottom:14px; color:#fbbf24;">🗳️ 투표 결과</h3>`;
+        sorted.forEach(t => {
+            const n = counts[t].length;
+            const pct = Math.round((n / total) * 100);
+            const top = (n === maxCount);
+            const voters = counts[t].map(v => esc2((window.players[v] || {}).name || '?')).join(', ');
+            vh += `<div style="margin-bottom:14px;">
+                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                        <b style="color:${top ? '#fbbf24' : '#e2e8f0'}; font-size:0.98rem;">${top ? '👑 ' : ''}${esc2((window.players[t] || {}).name || '?')}</b>
+                        <span style="color:${top ? '#fbbf24' : '#94a3b8'}; font-weight:bold; white-space:nowrap;">${n}표</span>
+                     </div>
+                     <div style="height:9px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:${top ? '#fbbf24' : '#64748b'}; border-radius:999px;"></div>
+                     </div>
+                     <div style="font-size:0.8rem; color:#94a3b8; margin-top:5px;">↳ ${voters}</div>
+                   </div>`;
         });
-        voteSummaryHtml += `</table></div>`;
-        html += voteSummaryHtml;
+        vh += `</div>`;
+        html += vh;
     }
 
     // 게임 오버 시 다시하기 버튼은 항상 맨 아래에
