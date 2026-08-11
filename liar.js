@@ -16,7 +16,37 @@ const WORD_MAFIA_DICTIONARY = [
     ['노트북', '스마트폰'], ['산', '바다'], ['연필', '볼펜'], ['소주', '맥주']
 ];
 
+// 비밀(제시어·라이어)은 방 노드에 없다. 방장만 secret에서 되살려 쓴다.
+function mergeLiarSecret(data) {
+    if (data.liarId || !window.isHost) return data;
+    const sec = (window._secret && window._secret.liar) || null;
+    if (!sec) return data;
+    data.liarId = sec.liarId;
+    data.spyId = sec.spyId;
+    data.word = sec.word;
+    data.liarFakeWord = sec.liarFakeWord;
+    return data;
+}
+window.mergeLiarSecret = mergeLiarSecret;
+
+// 게임이 끝나면 방장이 정답과 라이어를 공개한다
+function hostRevealLiar(data) {
+    if (!window.isHost || data.liarState !== 'game_over' || data.revealed) return;
+    const sec = (window._secret && window._secret.liar) || null;
+    if (!sec) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        revealed: {
+            word: sec.word || null,
+            liarFakeWord: sec.liarFakeWord || null,
+            liarId: sec.liarId || null,
+            spyId: sec.spyId || null
+        }
+    });
+}
+
 window.updateLiar = function(data) {
+    mergeLiarSecret(data);
+    hostRevealLiar(data);
     const content = document.getElementById('liar-content');
     
     // 1. 대기실
@@ -132,14 +162,40 @@ window.updateLiar = function(data) {
                 
                 const turnMode = document.getElementById('liar-turn-mode-select').value;
                 
+                // 각자의 봉투 — 자기가 알아야 할 것만 들어간다
+                const liarPriv = {};
+                pKeys.forEach(function(k) {
+                    const uid = (window.players[k] || {}).uid;
+                    if (!uid) return;
+                    const kIsLiar = (k === liarId);
+                    const kIsSpy = (k === spyId);
+                    const box = {
+                        isLiar: kIsLiar,
+                        isSpy: kIsSpy,
+                        word: kIsLiar ? (liarFakeWord || '') : selectedWord
+                    };
+                    if (kIsSpy) {
+                        box.liarName = (window.players[liarId] || {}).name || '?';
+                        box.realWord = selectedWord;
+                    }
+                    liarPriv[uid] = { liar: box };
+                });
+
+                // 비밀은 방 노드 바깥에 저장한다
+                window.firebaseUpdate(window.firebaseRef(window.db), {
+                    ['secrets/' + window.myRoom]: { liar: { liarId: liarId, spyId: spyId, word: selectedWord, liarFakeWord: liarFakeWord } },
+                    ['privates/' + window.myRoom]: liarPriv
+                });
+
                 window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
                     liarState: 'role_reveal',
                     gameMode: mode,
-                    liarId: liarId,
-                    spyId: spyId,
+                    liarId: null,        // 공개 노드에서 제거
+                    spyId: null,
+                    word: null,
+                    liarFakeWord: null,
+                    revealed: null,
                     category: selectedCat,
-                    word: selectedWord,
-                    liarFakeWord: liarFakeWord,
                     turnIndex: 0,
                     turnOrder: finalOrder,
                     turnMode: turnMode,
@@ -166,8 +222,9 @@ window.updateLiar = function(data) {
 
     // 게임 진행 UI
     let html = '';
-    const isLiar = (window.myPlayerId === data.liarId);
-    const isSpy = (window.myPlayerId === data.spyId);
+    const myLiar = (window._myPrivate && window._myPrivate.liar) || null;
+    const isLiar = myLiar ? !!myLiar.isLiar : (window.myPlayerId === data.liarId);
+    const isSpy = myLiar ? !!myLiar.isSpy : (window.myPlayerId === data.spyId);
     
     // 최상단 메시지
     if (data.msg) {
@@ -177,7 +234,7 @@ window.updateLiar = function(data) {
     // 내 역할 카드 (게임 종료 전까지 항상 보임)
     if (data.liarState !== 'game_over') {
         if (data.gameMode === 'word_mafia') {
-            const myWord = isLiar ? data.liarFakeWord : data.word;
+            const myWord = myLiar ? myLiar.word : (isLiar ? data.liarFakeWord : data.word);
             html += `
                 <div class="card">
                     <h3 style="color:#a855f7; margin-bottom:10px;">모드: [ 🤡 동상이몽 모드 ]</h3>
@@ -192,10 +249,10 @@ window.updateLiar = function(data) {
                 <div class="card">
                     <h3 style="color:#a855f7; margin-bottom:10px;">카테고리: [ ${data.category} ]</h3>
                     <div class="role-title" style="color: ${(isLiar || isSpy) ? 'var(--danger)' : 'var(--primary)'}; font-size:1.8rem; margin:10px 0;">
-                        ${isLiar ? '당신은 🤡 라이어입니다!' : (isSpy ? '당신은 🕵️ 스파이입니다!' : `제시어: <b>${data.word}</b>`)}
+                        ${isLiar ? '당신은 🤡 라이어입니다!' : (isSpy ? '당신은 🕵️ 스파이입니다!' : `제시어: <b>${myLiar ? myLiar.word : data.word}</b>`)}
                     </div>
                     ${isLiar ? '<p style="color:#aaa; font-size:0.9rem;">정체를 숨기고 눈치껏 아는 척 설명하세요!</p>' : ''}
-                    ${isSpy ? `<p style="color:var(--danger); font-size:0.9rem; margin-top:5px;">진짜 라이어는 <b>[${window.players[data.liarId].name}]</b>님입니다!<br>정답은 <b>[${data.word}]</b> 입니다.<br>라이어에게 은밀히 힌트를 주세요!</p>` : ''}
+                    ${isSpy ? `<p style="color:var(--danger); font-size:0.9rem; margin-top:5px;">진짜 라이어는 <b>[${myLiar ? myLiar.liarName : (window.players[data.liarId] || {}).name}]</b>님입니다!<br>정답은 <b>[${myLiar ? myLiar.realWord : data.word}]</b> 입니다.<br>라이어에게 은밀히 힌트를 주세요!</p>` : ''}
                     ${(!isLiar && !isSpy) ? '<p style="color:#aaa; font-size:0.9rem;">라이어에게 들키지 않게, 하지만 시민에겐 알아듣게 설명하세요!</p>' : ''}
                 </div>
             `;
@@ -281,9 +338,10 @@ window.updateLiar = function(data) {
         
         html += `<div class="vote-list">`;
         Object.keys(window.players).forEach(pId => {
+            if (pId === window.myPlayerId) return; // 자기 자신은 지목할 수 없다
             const isSelected = myVote === pId;
             html += `<button class="vote-btn ${isSelected ? 'selected' : ''}" onclick="window.submitLiarAction('voteTarget', '${pId}')">
-                ${window.players[pId].name}
+                ${(window.escapeHtml || (x=>x))(window.players[pId].name)}
             </button>`;
         });
         html += `</div>`;
@@ -312,7 +370,7 @@ window.updateLiar = function(data) {
     // Phase 5: 라이어의 추측 (liar_guess)
     else if (data.liarState === 'liar_guess') {
         // 스파이가 죽었든, 라이어가 죽었든 무조건 '진짜 라이어' 본인이 정답을 맞춤
-        if (window.myPlayerId === data.liarId) {
+        if (isLiar) {
             html += `
                 <div class="card" style="border:2px solid var(--danger);">
                     <h3 style="color:var(--danger); margin-bottom:15px;">🚨 정체가 탄로 났거나, 동료(스파이)가 죽었습니다!</h3>
@@ -347,11 +405,12 @@ window.updateLiar = function(data) {
         }
         
         html += winHtml;
+        const rv = data.revealed || { word: data.word, liarFakeWord: data.liarFakeWord, liarId: data.liarId, spyId: data.spyId };
         html += `<div class="card" style="margin-top:15px; text-align:center;">
-            <p>다수파 단어: <b>${data.word}</b></p>
-            ${data.gameMode === 'word_mafia' ? `<p>소수파 단어: <b>${data.liarFakeWord}</b></p>` : ''}
-            <p style="margin-top:10px;">라이어(소수파): <b>${window.players[data.liarId].name}</b></p>
-            ${data.spyId ? `<p>스파이: <b>${window.players[data.spyId].name}</b></p>` : ''}
+            <p>다수파 단어: <b>${rv.word || '-'}</b></p>
+            ${data.gameMode === 'word_mafia' ? `<p>소수파 단어: <b>${rv.liarFakeWord || '-'}</b></p>` : ''}
+            <p style="margin-top:10px;">라이어(소수파): <b>${(window.players[rv.liarId] || {}).name || '-'}</b></p>
+            ${rv.spyId ? `<p>스파이: <b>${(window.players[rv.spyId] || {}).name || '-'}</b></p>` : ''}
         </div>`;
     }
 
@@ -446,7 +505,7 @@ window.submitLiarGuess = function() {
 window.liarHostAction = async function(command) {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snapshot = await window.firebaseGet(roomRef);
-    const data = snapshot.val();
+    const data = mergeLiarSecret(snapshot.val());
     let updates = {};
 
     if (command === 'start_turn') {

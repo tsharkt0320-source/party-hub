@@ -2,7 +2,11 @@
 
 function getCategoriesForMode(mode) {
     if (!window.QUIZ_DB[mode]) return ['랜덤'];
-    return Object.keys(window.QUIZ_DB[mode]);
+    const cats = Object.keys(window.QUIZ_DB[mode]);
+    // 실제 카테고리가 하나뿐이면 '랜덤'은 그것과 완전히 같은 결과라서 고를 이유가 없다
+    const real = cats.filter(c => c !== '랜덤');
+    if (real.length <= 1) return real.length ? real : ['랜덤'];
+    return cats;
 }
 
 window.updateQuiz = function(data) {
@@ -278,7 +282,7 @@ window.updateQuiz = function(data) {
             if (canControl) {
                 html += `<div style="display:flex; gap:10px; margin-top:20px;">
                             <button class="btn primary" style="flex:1; padding:15px; font-size:1.1rem;" onclick="window.startQuizGame()">▶ 다음 문제</button>
-                            <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()">⚙️</button>
+                            <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                          </div>`;
             }
         } else {
@@ -309,7 +313,7 @@ window.updateQuiz = function(data) {
                 if (canControl) {
                     html += `<div style="display:flex; gap:10px; margin-top:10px;">
                                 <button class="btn primary" style="flex:1; padding:15px; font-size:1.1rem;" onclick="window.startQuizGame()">▶ 다음 문제</button>
-                                <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()">⚙️</button>
+                                <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
@@ -317,7 +321,7 @@ window.updateQuiz = function(data) {
                 if (canControl) {
                     html += `<div style="display:flex; gap:10px; margin-top:20px;">
                                 <button class="btn primary" style="flex:1; padding:15px; font-size:1.1rem;" onclick="window.startQuizGame()">▶ 다음 문제</button>
-                                <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()">⚙️</button>
+                                <button class="btn secondary" style="padding:15px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
@@ -356,7 +360,7 @@ window.updateQuiz = function(data) {
                 if (canControl && !data.buzzer_winner) {
                     html += `<div style="display:flex; gap:10px; margin-top:15px;">
                                 <button class="btn primary" style="flex:1; padding:12px;" onclick="window.startQuizGame()">▶ 다음</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()">⚙️</button>
+                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
@@ -369,8 +373,8 @@ window.updateQuiz = function(data) {
                 if (canControl) {
                     html += `<div style="display:flex; gap:10px; margin-top:15px;">
                                 <button class="btn primary" style="flex:1; padding:12px;" onclick="window.startQuizGame()">▶ 다음 문제</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.hostForceCorrect()">강제 정답</button>
-                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()">⚙️</button>
+                                <button class="btn secondary" style="padding:12px;" onclick="window.hostForceCorrect()" title="아무도 못 맞혔을 때 방장이 정답을 공개합니다">정답 공개</button>
+                                <button class="btn secondary" style="padding:12px;" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
             }
@@ -474,12 +478,26 @@ window.startQuizGame = async function() {
     const questions = window.QUIZ_DB[mode][cat];
     if (!questions || questions.length === 0) { alert("문제가 없습니다."); return; }
     
+    // 출제 이력의 열쇠를 '초성'이 아니라 '모드|정답'으로 잡는다.
+    // 초성으로 잡으면 ㅅㄹ(쉬리)과 ㅅㄹ(슈렉)처럼 서로 다른 문제가 같은 것으로 취급돼
+    // 한쪽이 나오면 다른 쪽이 영영 안 나온다. 모드가 다른 문제끼리 섞이는 것도 막는다.
+    const qKey = (q) => mode + '|' + (q.a || q.q);
+
     const usedQuestions = data.usedQuestions || [];
-    const available = questions.filter(q => !usedQuestions.includes(q.q));
+    const available = questions.filter(q => !usedQuestions.includes(qKey(q)));
     if (available.length === 0) { alert("이 카테고리의 모든 문제가 출제되었습니다. 문제를 초기화해주세요."); return; }
 
     const qData = available[Math.floor(Math.random() * available.length)];
-    usedQuestions.push(qData.q);
+    usedQuestions.push(qKey(qData));
+
+    // '랜덤'으로 뽑았어도 화면에는 실제 카테고리를 보여준다.
+    // 초성 퀴즈에서 카테고리는 사실상 유일한 단서라, '랜덤'이라고만 쓰면 맞힐 수가 없다.
+    let displayCat = cat;
+    if (cat === '랜덤') {
+        for (const c of Object.keys(window.QUIZ_DB[mode])) {
+            if (c !== '랜덤' && window.QUIZ_DB[mode][c].indexOf(qData) !== -1) { displayCat = c; break; }
+        }
+    }
     
     let desc = data.describer;
     if (mode === 'charades' && !desc) desc = window.myPlayerId;
@@ -489,7 +507,7 @@ window.startQuizGame = async function() {
     const timerSec = data.timer_seconds || 3;
     
     let updateObj = {
-        quizState: 'playing', gameMode: mode, category: cat,
+        quizState: 'playing', gameMode: mode, category: displayCat,
         question: qData.q, answer: qData.a,
         img: qData.img || null, hints: qData.hints || null,
         describer: desc || null, winner: null,

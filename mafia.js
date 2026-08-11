@@ -1,6 +1,117 @@
 // mafia.js
 
+// 직업 구성을 한 곳에서 계산한다. 미리보기와 실제 배정이 갈라지지 않게 하기 위함.
+// 전원이 특수직업이면 '평범한 시민' 이 사라져 마피아 게임이 성립하지 않으므로
+// 인원의 일부는 반드시 시민으로 남긴다.
+function buildRoleComposition(pCount, options) {
+    const roles = [];
+    const dropped = [];
+    const mafiaCount = pCount >= 6 ? 2 : 1;
+
+    roles.push('mafia');
+    if (mafiaCount > 1) roles.push(options.seducer ? 'seducer' : 'mafia');
+
+    if (pCount > 3) roles.push('police');
+    if (pCount > 4) roles.push('doctor');
+
+    // 최소 시민 수: 5명당 1명, 최소 1명
+    const reserve = Math.max(1, Math.floor(pCount / 5));
+    const cap = pCount - reserve;
+
+    const optional = [
+        [options.medium,     'medium',     '영매'],
+        [options.hunter,     'hunter',     '사냥꾼'],
+        [options.politician, 'politician', '정치인'],
+        [options.madman,     'madman',     '광인']
+    ];
+    optional.forEach(function(o) {
+        if (!o[0]) return;
+        if (roles.length < cap) roles.push(o[1]);
+        else dropped.push(o[2]);
+    });
+
+    while (roles.length < pCount) roles.push('citizen');
+    return { roles: roles, dropped: dropped };
+}
+window.buildRoleComposition = buildRoleComposition;
+
+const ROLE_KO = { mafia:'마피아', seducer:'유혹자', police:'경찰', doctor:'의사',
+                  medium:'영매', hunter:'사냥꾼', politician:'정치인', madman:'광인', citizen:'시민' };
+
+// 공개 투표에서는 2표를 던지는 순간 정치인이 누구인지 드러난다.
+// 그래서 공개 투표가 켜져 있으면 2표 옵션을 잠근다.
+window.syncPolVoteOption = function() {
+    const pub = document.getElementById('opt-public-vote');
+    const two = document.getElementById('opt-pol-2votes');
+    const note = document.getElementById('pol-2votes-note');
+    if (!pub || !two) return;
+    const locked = pub.checked;
+    two.disabled = locked;
+    two.parentElement.style.opacity = locked ? '0.45' : '1';
+    if (note) {
+        note.innerText = locked
+            ? '공개 투표 모드에서는 2표를 던지는 순간 정치인이 누구인지 드러나서 사용할 수 없습니다.'
+            : '';
+    }
+};
+
+// 직업표는 방 노드에 없다. 방장은 secret 전체를, 나머지는 자기 것 + 공개된 것만 본다.
+function resolveRoles(data) {
+    if (data.roles) return data.roles; // 예전 방식으로 시작된 방 (하위 호환)
+    if (window.isHost && window._secret && window._secret.roles) return window._secret.roles;
+    const merged = Object.assign({}, data.revealed || {});
+    const mine = window._myPrivate && window._myPrivate.role;
+    if (mine) merged[window.myPlayerId] = mine;
+    return merged;
+}
+
+// 방장이 경찰 조사 결과 · 영매의 눈을 해당 인물의 봉투에 넣어준다.
+// 남의 봉투는 읽을 수 없으므로, 이미 보냈는지는 방장 쪽에서 기억한다.
+function hostPushPrivateNotes(data) {
+    if (!window.isHost || !window.myRoom) return;
+    const roles = (window._secret && window._secret.roles) || null;
+    if (!roles) return;
+    window._pushedNotes = window._pushedNotes || {};
+    const actions = data.nightActions || {};
+    const updates = {};
+
+    Object.keys(window.players || {}).forEach(function(pId) {
+        const uid = window.players[pId].uid;
+        if (!uid) return;
+        const role = roles[pId];
+
+        if (role === 'police' && actions.investigate) {
+            const key = 'inv:' + pId + ':' + actions.investigate + ':' + (data.dayCount || 0);
+            if (!window._pushedNotes[key]) {
+                window._pushedNotes[key] = true;
+                const t = roles[actions.investigate];
+                updates['privates/' + window.myRoom + '/' + uid + '/investigate'] = {
+                    target: actions.investigate,
+                    isMafia: (t === 'mafia' || t === 'seducer')
+                };
+            }
+        }
+        if (role === 'medium' && data.lastDead) {
+            const key = 'med:' + pId + ':' + data.lastDead + ':' + (data.dayCount || 0);
+            if (!window._pushedNotes[key]) {
+                window._pushedNotes[key] = true;
+                const t = roles[data.lastDead];
+                updates['privates/' + window.myRoom + '/' + uid + '/medium'] = {
+                    target: data.lastDead,
+                    isMafia: (t === 'mafia' || t === 'seducer')
+                };
+            }
+        }
+    });
+
+    if (Object.keys(updates).length > 0) {
+        window.firebaseUpdate(window.firebaseRef(window.db), updates);
+    }
+}
+
 window.updateMafia = function(data) {
+    data.roles = resolveRoles(data);
+    hostPushPrivateNotes(data);
     const content = document.getElementById('mafia-content');
     
     // Check if game just started (no mafiaState)
@@ -11,7 +122,7 @@ window.updateMafia = function(data) {
                     <h3 style="margin-bottom:15px;">⚙️ 마피아 게임 설정</h3>
                     
                     <div style="margin-bottom:10px;">
-                        <label><input type="checkbox" id="opt-public-vote" checked> <b>공개 투표 모드</b> (누가 누구를 찍었는지 언제든 열람 가능)</label>
+                        <label><input type="checkbox" id="opt-public-vote" checked onchange="window.syncPolVoteOption()"> <b>공개 투표 모드</b> (누가 누구를 찍었는지 언제든 열람 가능)</label>
                     </div>
                     
                     <h4 style="margin:15px 0 5px 0;">✨ 특수 직업 포함</h4>
@@ -20,10 +131,11 @@ window.updateMafia = function(data) {
                         <label><input type="checkbox" id="opt-role-hunter"> 🏹 사냥꾼 (처형당할 때 1명 길동무) <span style="font-size:0.8em; color:#fbbf24; margin-left:5px;">[추천: 5인 이상]</span></label>
                         <label><input type="checkbox" id="opt-role-seducer"> 💋 유혹자 (마피아팀: 투표권/능력 봉쇄) <span style="font-size:0.8em; color:#fbbf24; margin-left:5px;">[추천: 7인 이상]</span></label>
                         <label><input type="checkbox" id="opt-role-madman"> 🤡 광인 (자살희망자: 처형 시 단독 승리) <span style="font-size:0.8em; color:#fbbf24; margin-left:5px;">[추천: 6인 이상]</span></label>
-                        <label><input type="checkbox" id="opt-role-politician" onchange="document.getElementById('pol-opts').style.display=this.checked?'block':'none'"> 👔 정치인 (투표 특권) <span style="font-size:0.8em; color:#fbbf24; margin-left:5px;">[추천: 5인 이상]</span></label>
+                        <label><input type="checkbox" id="opt-role-politician" onchange="document.getElementById('pol-opts').style.display=this.checked?'block':'none'; window.syncPolVoteOption();"> 👔 정치인 (투표로 죽지 않음) <span style="font-size:0.8em; color:#fbbf24; margin-left:5px;">[추천: 5인 이상]</span></label>
                         <div id="pol-opts" style="display:none; padding-left:20px; color:#aaa;">
+                            <div style="color:#60a5fa; font-size:0.85rem; margin-bottom:4px;">✔ 낮 투표로는 처형되지 않습니다 (기본)</div>
                             <label><input type="checkbox" id="opt-pol-2votes" checked> 투표 시 2표 행사</label>
-                            <label><input type="checkbox" id="opt-pol-immunity" checked> 처형 면제 (투표로 죽지 않음)</label>
+                            <div id="pol-2votes-note" style="font-size:0.8rem; color:#f59e0b; margin-top:2px;"></div>
                         </div>
                         </div>
                     </div>
@@ -46,24 +158,12 @@ window.updateMafia = function(data) {
                 const optPolitician = document.getElementById('opt-role-politician').checked;
                 const optMadman = document.getElementById('opt-role-madman').checked;
 
+                const comp = buildRoleComposition(pCount, {
+                    seducer: optSeducer, medium: optMedium, hunter: optHunter,
+                    politician: optPolitician, madman: optMadman
+                });
                 let counts = { '마피아': 0, '유혹자': 0, '경찰': 0, '의사': 0, '영매': 0, '사냥꾼': 0, '정치인': 0, '광인': 0, '시민': 0 };
-                let totalRolesAssigned = 0;
-
-                counts['마피아']++; totalRolesAssigned++;
-                if (mafiaCount > 1) {
-                    if (optSeducer) { counts['유혹자']++; totalRolesAssigned++; }
-                    else { counts['마피아']++; totalRolesAssigned++; }
-                }
-
-                if (pCount > 3) { counts['경찰']++; totalRolesAssigned++; }
-                if (pCount > 4) { counts['의사']++; totalRolesAssigned++; }
-                if (optMedium && totalRolesAssigned < pCount) { counts['영매']++; totalRolesAssigned++; }
-                if (optHunter && totalRolesAssigned < pCount) { counts['사냥꾼']++; totalRolesAssigned++; }
-                if (optPolitician && totalRolesAssigned < pCount) { counts['정치인']++; totalRolesAssigned++; }
-                if (optMadman && totalRolesAssigned < pCount) { counts['광인']++; totalRolesAssigned++; }
-
-                let c = pCount - totalRolesAssigned;
-                if (c > 0) counts['시민'] = c;
+                comp.roles.forEach(function(r) { counts[ROLE_KO[r]]++; });
 
                 let previewText = `👥 총 <b>${pCount}</b>명 참가 중<br><div style="margin-top:8px;">`;
                 let rolesList = [];
@@ -75,6 +175,12 @@ window.updateMafia = function(data) {
                     }
                 }
                 previewText += rolesList.join(' / ') + '</div>';
+                if (comp.dropped.length > 0) {
+                    previewText += `<div style="margin-top:10px; padding:8px; border-radius:8px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#fbbf24; font-size:0.85rem;">
+                        ⚠️ 인원이 부족해 다음 직업은 제외됩니다 → <b>${comp.dropped.join(' · ')}</b><br>
+                        <span style="color:#fcd34d; font-size:0.8rem;">평범한 시민이 최소 ${Math.max(1, Math.floor(pCount/5))}명은 있어야 게임이 성립합니다.</span>
+                    </div>`;
+                }
                 
                 const previewBox = document.getElementById('role-preview-box');
                 if (previewBox) previewBox.innerHTML = previewText;
@@ -86,7 +192,8 @@ window.updateMafia = function(data) {
                 if (el) el.addEventListener('change', updateRolePreview);
             });
             setTimeout(updateRolePreview, 0);
-            
+            setTimeout(window.syncPolVoteOption, 0);
+
             document.getElementById('btn-start-mafia').onclick = () => {
                 const pKeys = Object.keys(window.players);
                 
@@ -98,38 +205,47 @@ window.updateMafia = function(data) {
                     seducer: document.getElementById('opt-role-seducer').checked,
                     madman: document.getElementById('opt-role-madman').checked,
                     politician: document.getElementById('opt-role-politician').checked,
-                    pol2Votes: document.getElementById('opt-pol-2votes')?.checked,
-                    polImmunity: document.getElementById('opt-pol-immunity')?.checked
+                    // 공개 투표에서는 2표를 쓰는 순간 정치인이 누구인지 드러나므로 금지한다
+                    pol2Votes: !document.getElementById('opt-public-vote').checked
+                                && !!document.getElementById('opt-pol-2votes')?.checked,
+                    polImmunity: true   // 처형 면제는 정치인의 기본 능력
                 };
 
-                let roles = [];
-                let mafiaCount = pKeys.length >= 6 ? 2 : 1;
-                
-                // Add mafia team
-                roles.push('mafia');
-                if (mafiaCount > 1 && options.seducer) roles.push('seducer');
-                else if (mafiaCount > 1) roles.push('mafia');
-                
-                // Add citizen special roles based on checkboxes
-                if (pKeys.length > 3) roles.push('police');
-                if (pKeys.length > 4) roles.push('doctor');
-                if (options.medium && roles.length < pKeys.length) roles.push('medium');
-                if (options.hunter && roles.length < pKeys.length) roles.push('hunter');
-                if (options.politician && roles.length < pKeys.length) roles.push('politician');
-                if (options.madman && roles.length < pKeys.length) roles.push('madman');
-                
-                // Fill rest with citizens
-                while(roles.length < pKeys.length) roles.push('citizen');
-                
-                // Shuffle roles
-                roles.sort(() => Math.random() - 0.5);
+                const comp = buildRoleComposition(pKeys.length, options);
+                let roles = comp.roles;
+
+                // Fisher-Yates 셔플. sort(() => Math.random() - 0.5) 는 균등하지 않다.
+                for (let i = roles.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    const t = roles[i]; roles[i] = roles[j]; roles[j] = t;
+                }
                 
                 let assigned = {};
                 pKeys.forEach((k, i) => assigned[k] = roles[i]);
-                
+
+                // 직업 구성(마피아 몇 명인지)은 모두가 알아야 하는 공개 정보
+                const counts = {};
+                Object.values(assigned).forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+
+                // 각자의 봉투 — 자기 직업만 들어간다
+                const priv = {};
+                pKeys.forEach(k => {
+                    const uid = (window.players[k] || {}).uid;
+                    if (uid) priv[uid] = { role: assigned[k] };
+                });
+                window._pushedNotes = {};
+
+                // 비밀은 방 노드 바깥에 저장한다 (규칙으로 열람 대상을 나눌 수 있도록)
+                window.firebaseUpdate(window.firebaseRef(window.db), {
+                    ['secrets/' + window.myRoom]: { roles: assigned },   // 방장만 읽을 수 있다
+                    ['privates/' + window.myRoom]: priv                  // 각자 자기 것만 읽을 수 있다
+                });
+
                 window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
                     mafiaState: 'role_reveal',
-                    roles: assigned,
+                    roles: null,                 // 공개 노드에서 제거 — 개발자도구로도 안 보인다
+                    roleCounts: counts,
+                    revealed: null,
                     options: options,
                     alive: pKeys.reduce((acc, curr) => ({...acc, [curr]: true}), {}),
                     msg: '각자의 역할을 확인해 주세요. 아무에게도 말하지 마세요!',
@@ -172,7 +288,7 @@ window.updateMafia = function(data) {
                         - <span style="color:#aaa;">죽을 때 1명을 길동무로 데려갑니다. 내가 죽을 위기라면 과감하게 마피아로 의심되는 자를 쏘세요!</span>
                     </div>
                     <div class="card" style="padding:10px;">
-                        <b>👔 정치인</b> (시민팀)<br>
+                        <b>👔 정치인</b> (시민팀) — 낮 투표로는 처형되지 않음<br>
                         - <span style="color:#aaa;">투표권이 2장이거나 처형을 면제받습니다. 여론을 주도하고 시민팀의 중심이 되세요.</span>
                     </div>
                     <div class="card" style="padding:10px;">
@@ -195,9 +311,8 @@ window.updateMafia = function(data) {
     const isAlive = data.alive[window.myPlayerId];
     const options = data.options || {};
     
-    const polDesc = [];
+    const polDesc = ['낮 투표로는 처형되지 않습니다'];
     if (options.pol2Votes) polDesc.push('투표 시 2표 행사');
-    if (options.polImmunity) polDesc.push('낮 투표로 처형되지 않음');
     const roleInfos = {
         'mafia': { n: '🕵️ 마피아', d: '밤마다 한 명을 암살합니다.' },
         'seducer': { n: '💋 유혹자', d: '밤마다 한 명을 유혹해 다음 날 능력을 봉쇄합니다.' },
@@ -221,8 +336,8 @@ window.updateMafia = function(data) {
     let statusBg = isAlive ? '#22c55e' : '#64748b';
     let statusText = isAlive ? '🟢 생존해 있습니다' : '💀 사망했습니다';
 
-    let roleCounts = {};
-    Object.values(data.roles).forEach(r => { roleCounts[r] = (roleCounts[r] || 0) + 1; });
+    let roleCounts = data.roleCounts || {};
+    if (!data.roleCounts) Object.values(data.roles).forEach(r => { roleCounts[r] = (roleCounts[r] || 0) + 1; });
     
     const roleOrder = ['mafia', 'seducer', 'police', 'doctor', 'medium', 'hunter', 'politician', 'madman', 'citizen'];
     let roleSummaryArr = [];
@@ -243,7 +358,7 @@ window.updateMafia = function(data) {
             <div style="padding:15px;">
                 <div style="display:flex; align-items:center; gap:15px; margin-bottom:5px;">
                     <span style="font-size:1.3rem; font-weight:bold; white-space:nowrap;">${roleInfos[myRole].n}</span>
-                    <span style="font-size:0.85rem; color:#cbd5e1; opacity:0.9; text-align:left; line-height:1.3;">${roleInfos[myRole].d}</span>
+                    <span style="font-size:0.85rem; color:#cbd5e1; opacity:0.9; text-align:left; line-height:1.3;">${isAlive ? roleInfos[myRole].d : '사망하여 능력을 더 이상 쓸 수 없습니다.'}</span>
                 </div>
                 <div style="margin-top:12px; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px; font-size:0.9rem; text-align:center;">
                     <div style="color:#94a3b8; margin-bottom:5px; font-size:0.8rem; font-weight:bold;">[ 게임 전체 직업 구성 ]</div>
@@ -282,7 +397,7 @@ window.updateMafia = function(data) {
         Object.keys(data.votes).forEach(voter => {
             let t = data.votes[voter];
             let weight = 1;
-            if (data.roles[voter] === 'politician' && options.pol2Votes) weight = 2;
+            if (window.isHost && data.roles[voter] === 'politician' && options.pol2Votes) weight = 2;
             if (!counts[t]) counts[t] = { count: 0, voters: [] };
             counts[t].count += weight;
             counts[t].voters.push(voter);
@@ -384,9 +499,12 @@ window.updateMafia = function(data) {
             }
             else if (myRole === 'police') {
                 if (actions.investigate) {
-                    const targetRole = data.roles[actions.investigate];
-                    const isTargetMafia = targetRole === 'mafia' || targetRole === 'seducer';
-                    html += `<p class="info-text" style="color:${isTargetMafia ? '#ef4444' : '#3b82f6'};">조사 결과: <b>${window.players[actions.investigate].name}</b>님은 ${isTargetMafia ? '마피아팀입니다!' : '마피아팀이 아닙니다.'}</p>`;
+                    const inv = (window._myPrivate || {}).investigate;
+                    if (inv && inv.target === actions.investigate) {
+                        html += `<p class="info-text" style="color:${inv.isMafia ? '#ef4444' : '#3b82f6'};">조사 결과: <b>${window.players[actions.investigate].name}</b>님은 ${inv.isMafia ? '마피아팀입니다!' : '마피아팀이 아닙니다.'}</p>`;
+                    } else {
+                        html += `<p class="info-text" style="color:#94a3b8;">🔎 <b>${window.players[actions.investigate].name}</b>님을 조사하는 중...</p>`;
+                    }
                 } else {
                     html += generateTargetList(data.alive, 'investigate', '조사', null);
                 }
@@ -395,12 +513,24 @@ window.updateMafia = function(data) {
                 if (actions.heal) html += `<p class="info-text">현재 보호 대상: <b>${window.players[actions.heal].name}</b></p>`;
                 html += generateTargetList(data.alive, 'heal', '살리기', actions.heal, true);
             }
-            else if (myRole === 'medium' && data.lastDead) {
-                const deadRole = data.roles[data.lastDead];
-                const isTargetMafia = deadRole === 'mafia' || deadRole === 'seducer';
-                html += `<div class="card info-text" style="color:#a855f7;">🔮 영매의 눈: 어젯밤 죽은 <b>${window.players[data.lastDead].name}</b>님은 ${isTargetMafia ? '마피아팀이었습니다.' : '시민팀이었습니다.'}</div>`;
+            else if (myRole === 'medium') {
+                const med = (window._myPrivate || {}).medium;
+                if (!data.lastDead) {
+                    html += `<div class="card info-text" style="color:#94a3b8;">🔮 아직 죽은 사람이 없어 오늘 밤은 볼 것이 없습니다. 다음 밤을 기다려 주세요.</div>`;
+                } else if (med && med.target === data.lastDead) {
+                    html += `<div class="card info-text" style="color:#a855f7;">🔮 영매의 눈: 어젯밤 죽은 <b>${window.players[data.lastDead].name}</b>님은 ${med.isMafia ? '마피아팀이었습니다.' : '시민팀이었습니다.'}</div>`;
+                } else {
+                    html += `<div class="card info-text" style="color:#94a3b8;">🔮 영매의 눈을 뜨는 중...</div>`;
+                }
             }
-        } 
+            else {
+                // 시민 · 사냥꾼 · 정치인 · 광인처럼 밤에 할 일이 없는 직업
+                html += `<div class="card info-text" style="color:#94a3b8; text-align:center;">
+                            😴 오늘 밤 당신이 할 일은 없습니다.<br>
+                            <span style="font-size:0.85rem;">다른 사람들의 행동이 끝날 때까지 기다려 주세요.</span>
+                         </div>`;
+            }
+        }
         else if (data.mafiaState === 'vote') {
             const votes = data.votes || {};
             const myVote = votes[window.myPlayerId];
@@ -673,6 +803,8 @@ window.mafiaHostAction = async function(command) {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snapshot = await window.firebaseGet(roomRef);
     const data = snapshot.val();
+    // 직업표는 방 노드에 없다. 방장 전용 secret에서 되살려 쓴다.
+    data.roles = resolveRoles(data);
     let updates = {};
 
     if (command === 'start_night') {
@@ -979,6 +1111,6 @@ function checkWin(updates, aliveObj, rolesObj, options) {
         }
     });
     
-    if (mafiaCount === 0) { updates.mafiaState = 'game_over'; updates.winners = 'citizen'; }
-    else if (mafiaCount >= citizenTeamCount) { updates.mafiaState = 'game_over'; updates.winners = 'mafia'; }
+    if (mafiaCount === 0) { updates.mafiaState = 'game_over'; updates.winners = 'citizen'; updates.revealed = rolesObj; }
+    else if (mafiaCount >= citizenTeamCount) { updates.mafiaState = 'game_over'; updates.winners = 'mafia'; updates.revealed = rolesObj; }
 }

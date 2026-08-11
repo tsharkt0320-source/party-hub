@@ -323,3 +323,49 @@ body.is-host .guest-only { display: none; }
 .history-btn { width: 100%; background: #4b5563; padding: 10px; border-radius: 8px; color: white; border: none; text-align: left; font-weight: bold; }
 .history-content { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-top: 5px; display: none; text-align: left; font-size: 0.9rem; }
 .history-content.open { display: block; }
+
+/* ===== 복불복 미니게임 모션 ===== */
+
+/* 주사위: 데굴데굴 굴러가다가 멈춘다 */
+@keyframes diceTumble {
+    0%   { transform: translateX(-90px) rotate(0deg)    scale(0.9); }
+    25%  { transform: translateX(-40px) rotate(220deg)  scale(1.05); }
+    50%  { transform: translateX(15px)  rotate(460deg)  scale(0.95); }
+    75%  { transform: translateX(45px)  rotate(680deg)  scale(1.03); }
+    90%  { transform: translateX(58px)  rotate(840deg)  scale(1); }
+    100% { transform: translateX(60px)  rotate(900deg)  scale(1); }
+}
+@keyframes diceSettle {
+    0%   { transform: scale(1.25); }
+    45%  { transform: scale(0.92); }
+    75%  { transform: scale(1.06); }
+    100% { transform: scale(1); }
+}
+.dice-rolling { animation: diceTumble 1.8s cubic-bezier(0.25, 0.5, 0.3, 1) forwards; }
+.dice-settled { animation: diceSettle 0.45s ease-out; }
+
+/* 사다리: 경로를 위에서 아래로 그려 내려간다 */
+@keyframes ladderDraw { to { stroke-dashoffset: 0; } }
+@keyframes ladderPop {
+    0%   { transform: scale(0.4); opacity: 0; }
+    70%  { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.ladder-result { animation: ladderPop 0.45s ease-out both; }
+
+/* 룰렛/화살표가 멈춘 뒤 당첨 항목이 튀어오른다 */
+@keyframes winnerPop {
+    0%   { transform: scale(0.7); opacity: 0; }
+    60%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.winner-pop { animation: winnerPop 0.5s ease-out both; }
+
+/* 부저/카운트다운 등에서 쓰던 흔들림 (정의가 빠져 있었음) */
+@keyframes shake {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    20% { transform: translateX(-4px) rotate(-6deg); }
+    40% { transform: translateX(4px)  rotate(6deg); }
+    60% { transform: translateX(-3px) rotate(-4deg); }
+    80% { transform: translateX(3px)  rotate(4deg); }
+}

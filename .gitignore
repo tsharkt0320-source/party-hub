@@ -1,0 +1,7 @@
+# Firebase 배포 캐시 (자동 생성물)
+.firebase/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

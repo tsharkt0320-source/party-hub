@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "$other": {
+      ".read": false,
+      ".write": false
+    },
+
+    "rooms": {
+      ".read": "auth != null",
+      ".indexOn": ["lastActiveAt"],
+
+      "$roomId": {
+        ".write": "auth != null && $roomId.matches(/^[A-Z0-9]{4}$/)",
+
+        "players": {
+          "$playerId": {
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 30"
+            }
+          }
+        }
+      }
+    },
+
+    "secrets": {
+      "$roomId": {
+        ".read": "auth != null && auth.uid === root.child('rooms').child($roomId).child('hostUid').val()",
+        ".write": "auth != null && $roomId.matches(/^[A-Z0-9]{4}$/)"
+      }
+    },
+
+    "privates": {
+      "$roomId": {
+        ".write": "auth != null && $roomId.matches(/^[A-Z0-9]{4}$/)",
+
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}

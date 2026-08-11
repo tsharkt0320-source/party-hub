@@ -4,6 +4,19 @@ window.updateMinigames = function(data) {
     const content = document.getElementById('minigames-content');
     if (!content) return;
 
+    window._missileData = data;
+
+    // 미사일 피하기를 플레이하는 중에는 화면을 통째로 다시 그리면 캔버스가 사라진다.
+    // 기록판만 갱신하고 나머지는 손대지 않는다.
+    if (window._missileRunning) {
+        if (data.minigameState !== 'missile' || data.phase !== 'playing') {
+            window.stopMissileGame(false); // 방장이 게임을 바꿈 → 기록 없이 중단
+        } else {
+            renderMissileBoard(data);
+            return;
+        }
+    }
+
     // 1. 대기실 (미니게임 선택 창)
     if (!data.minigameState || data.minigameState === 'menu') {
         if (window.isHost) {
@@ -17,6 +30,7 @@ window.updateMinigames = function(data) {
                         <button class="btn secondary" onclick="startMinigame('dice')">🎲 주사위</button>
                         <button class="btn secondary" onclick="startMinigame('arrow')">🎯 화살표돌리기</button>
                         <button class="btn secondary" onclick="startMinigame('draw')">🎁 당첨자추첨</button>
+                        <button class="btn secondary" style="grid-column:1 / -1; background:#7c2d12;" onclick="startMinigame('missile')">🚀 미사일 피하기 (기록 대결)</button>
                     </div>
                 </div>
             `;
@@ -41,7 +55,21 @@ window.updateMinigames = function(data) {
     }
 
     content.innerHTML = gameHtml + backBtn;
+    syncDiceFlicker(data);
 };
+
+// 주사위가 구르는 1.8초 동안 눈금이 계속 바뀌어야 '굴러가는' 느낌이 난다.
+// Firebase 스냅샷은 그 사이에 오지 않으므로 화면 쪽에서 직접 돌린다.
+function syncDiceFlicker(data) {
+    const rolling = data.minigameState === 'dice' && data.isRolling;
+    if (window._diceFlicker) { clearInterval(window._diceFlicker); window._diceFlicker = null; }
+    if (!rolling) return;
+    window._diceFlicker = setInterval(() => {
+        const faces = document.querySelectorAll('.dice-face');
+        if (!faces.length) { clearInterval(window._diceFlicker); window._diceFlicker = null; return; }
+        faces.forEach(f => { f.innerText = 1 + Math.floor(Math.random() * 6); });
+    }, 90);
+}
 
 window.startMinigame = function(type) {
     if (!window.isHost) return;
@@ -63,6 +91,9 @@ window.startMinigame = function(type) {
         initialData.diceCount = 1;
     } else if (type === 'draw') {
         initialData.drawCount = 1;
+    } else if (type === 'missile') {
+        initialData.missileLevel = 'normal';
+        initialData.missileScores = null; // 새 판이므로 기록 초기화
     }
 
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), initialData);
@@ -84,6 +115,8 @@ function renderSpecificMinigame(data) {
         html += renderArrow(data);
     } else if (type === 'draw') {
         html += renderDraw(data);
+    } else if (type === 'missile') {
+        html += renderMissile(data);
     }
 
     return html;
@@ -151,11 +184,19 @@ function renderLadder(data) {
         if (data.phase === 'result' && data.paths) {
             const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
             data.paths.forEach((path, idx) => {
-                let d = `M ${(path[0].col + 0.5) * colWidth} ${path[0].row * (height/10)}`;
-                for (let i=1; i<path.length; i++) {
-                    d += ` L ${(path[i].col + 0.5) * colWidth} ${path[i].row * (height/10)}`;
+                const pts = path.map(pt => [(pt.col + 0.5) * colWidth, pt.row * (height / 10)]);
+                let d = `M ${pts[0][0]} ${pts[0][1]}`;
+                let len = 0;
+                for (let i = 1; i < pts.length; i++) {
+                    d += ` L ${pts[i][0]} ${pts[i][1]}`;
+                    len += Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]);
                 }
-                html += `<path d="${d}" fill="none" stroke="${colors[idx % colors.length]}" stroke-width="6" opacity="0.8" style="animation: dash 2s linear forwards; stroke-dasharray: 2000; stroke-dashoffset: 2000;" />`;
+                len = Math.ceil(len) + 12;
+                // 한 명씩 차례로 내려가야 눈으로 따라갈 수 있다
+                // var() 는 SVG dash 속성 보간에서 동작하지 않으므로 값을 그대로 써넣는다
+                html += `<path d="${d}" fill="none" stroke="${colors[idx % colors.length]}"
+                               stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"
+                               style="stroke-dasharray:${len}; stroke-dashoffset:${len}; animation: ladderDraw 2.2s linear ${(idx * 0.45).toFixed(2)}s forwards;" />`;
             });
         }
         
@@ -163,7 +204,14 @@ function renderLadder(data) {
         
         // 하단 결과 항목
         data.items.forEach((item, idx) => {
-            html += `<div style="position:absolute; bottom:0; left: ${(idx + 0.5) * colWidth}px; transform:translateX(-50%); background:#1e293b; border:1px solid #475569; padding:4px 8px; border-radius:4px; color:#cbd5e1; font-size:0.85rem; white-space:nowrap;">
+            const isWin = String(item).indexOf('당첨') !== -1;
+            const popped = data.phase === 'result';
+            const delay = (data.paths ? data.paths.length * 0.45 : 0) + 2.2;
+            html += `<div class="${popped ? 'ladder-result' : ''}"
+                          style="position:absolute; bottom:0; left: ${(idx + 0.5) * colWidth}px; transform:translateX(-50%);
+                                 background:${isWin ? '#b45309' : '#1e293b'}; border:1px solid ${isWin ? '#f59e0b' : '#475569'};
+                                 padding:4px 8px; border-radius:4px; color:${isWin ? '#fef3c7' : '#cbd5e1'};
+                                 font-size:0.85rem; white-space:nowrap; ${popped ? `animation-delay:${delay.toFixed(2)}s;` : ''}">
                         ${item}
                      </div>`;
         });
@@ -361,7 +409,7 @@ function renderRoulette(data) {
                  </div>`;
                  
         if (data.phase === 'result' && data.winner) {
-            html += `<div style="font-size:1.5rem; font-weight:bold; margin-top:20px; color:#10b981; animation:bounce 1s infinite;">
+            html += `<div class="winner-pop" style="font-size:1.7rem; font-weight:900; margin-top:20px; color:#10b981; text-shadow:0 0 24px rgba(16,185,129,0.6);">
                         🎉 당첨: ${data.winner} 🎉
                      </div>`;
         }
@@ -479,13 +527,16 @@ function renderDice(data) {
         const dCount = data.diceCount || 1;
         const results = data.diceResults || [1, 1];
         
-        html += `<div style="display:flex; justify-content:center; gap:20px; margin:30px 0; perspective:1000px;">`;
+        html += `<div style="display:flex; justify-content:center; gap:20px; margin:30px 0; min-height:130px; align-items:center;">`;
         for (let i = 0; i < dCount; i++) {
-            // 주사위 렌더링 (간단한 2D 텍스트 기반이나, CSS 효과 추가)
-            const val = data.isRolling ? '?' : results[i];
-            const anim = data.isRolling ? `animation: shake 0.5s infinite;` : ``;
-            
-            html += `<div style="width:100px; height:100px; background:white; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:4rem; font-weight:bold; color:#1e293b; box-shadow:inset 0 0 10px rgba(0,0,0,0.1), 0 5px 15px rgba(0,0,0,0.3); ${anim}">
+            const rolling = !!data.isRolling;
+            const val = rolling ? (1 + Math.floor(Math.random() * 6)) : results[i];
+            html += `<div class="dice-face ${rolling ? 'dice-rolling' : 'dice-settled'}"
+                          style="width:100px; height:100px; background:white; border-radius:18px;
+                                 display:flex; align-items:center; justify-content:center;
+                                 font-size:4rem; font-weight:900; color:#1e293b;
+                                 box-shadow:inset 0 0 12px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.35);
+                                 animation-delay:${(i * 0.12).toFixed(2)}s;">
                         ${val}
                      </div>`;
         }
@@ -541,7 +592,7 @@ window.rollDice = function() {
                 diceResults: results
             });
         });
-    }, 2000);
+    }, 2100); // 구르는 모션(1.8초)이 끝난 뒤 결과가 뜨도록
 };
 
 // --- 🎯 화살표 돌리기 (Arrow) ---
@@ -590,7 +641,7 @@ function renderArrow(data) {
                  </div>`;
                  
         if (data.phase === 'result' && data.winner) {
-            html += `<div style="font-size:1.5rem; font-weight:bold; margin-top:20px; color:#10b981; animation:pulse 1s infinite;">
+            html += `<div class="winner-pop" style="font-size:1.7rem; font-weight:900; margin-top:20px; color:#10b981; text-shadow:0 0 24px rgba(16,185,129,0.6);">
                         👉 지목된 사람: ${data.winner} 👈
                      </div>`;
         }
@@ -738,3 +789,355 @@ window.startDraw = function() {
         });
     }, 3000);
 };
+
+// --- 🚀 미사일 피하기 (Missile) ---
+// 각자 자기 폰에서 한 판씩 플레이하고, 버틴 시간을 공용 기록판에 남긴다.
+
+const MISSILE_LEVELS = {
+    easy:   { label: '쉬움',   spawnMs: 900, speed: 1.7, ramp: 0.000055 },
+    normal: { label: '보통',   spawnMs: 650, speed: 2.3, ramp: 0.000100 },
+    hard:   { label: '어려움', spawnMs: 430, speed: 3.1, ramp: 0.000165 }
+};
+
+function msToSec(ms) {
+    return (ms / 1000).toFixed(2);
+}
+
+function mgEsc(s) {
+    return (window.escapeHtml ? window.escapeHtml(s) : String(s == null ? '' : s));
+}
+
+// 기록판 HTML (오래 버틴 순)
+function missileBoardHtml(data) {
+    const scores = data.missileScores || {};
+    const rows = Object.keys(scores).map(id => Object.assign({ id: id }, scores[id]))
+                       .sort((a, b) => (b.ms || 0) - (a.ms || 0));
+    const notYet = Object.keys(window.players || {}).filter(id => !scores[id]);
+
+    let html = '<div class="card" style="margin-top:15px; text-align:left;">' +
+               '<h3 style="color:#fbbf24; margin-bottom:12px; text-align:center;">🏆 생존 기록</h3>';
+
+    if (rows.length === 0) {
+        html += '<p style="color:#94a3b8; text-align:center; font-size:0.9rem;">아직 아무도 도전하지 않았습니다.</p>';
+    } else {
+        const medals = ['🥇', '🥈', '🥉'];
+        rows.forEach((r, i) => {
+            const isMe = r.id === window.myPlayerId;
+            const rank = medals[i] || ((i + 1) + '위');
+            html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; border-radius:8px;' +
+                    ' background:' + (isMe ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)') + ';' +
+                    ' border:1px solid ' + (isMe ? '#fbbf24' : 'transparent') + ';">' +
+                        '<span style="font-size:0.95rem;">' +
+                            '<b style="display:inline-block; min-width:2.2em;">' + rank + '</b> ' +
+                            mgEsc(r.name) + (isMe ? ' <span style="color:#fbbf24;">(나)</span>' : '') +
+                        '</span>' +
+                        '<span style="font-weight:bold; color:#4ade80; font-size:1.05rem;">' + msToSec(r.ms) + '초</span>' +
+                    '</div>';
+        });
+    }
+
+    if (notYet.length > 0) {
+        const names = notYet.map(id => mgEsc((window.players[id] || {}).name || '?')).join(', ');
+        html += '<p style="color:#94a3b8; font-size:0.8rem; margin-top:10px; text-align:center;">아직 안 한 사람: ' + names + '</p>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
+// 플레이 중에는 기록판만 갈아끼운다 (캔버스 보존)
+function renderMissileBoard(data) {
+    const holder = document.getElementById('missile-board');
+    if (holder) holder.innerHTML = missileBoardHtml(data);
+}
+
+function renderMissile(data) {
+    const level = MISSILE_LEVELS[data.missileLevel] ? data.missileLevel : 'normal';
+    const scores = data.missileScores || {};
+    const myScore = scores[window.myPlayerId];
+
+    let html = '<div class="card" style="text-align:center;">' +
+               '<h3 style="color:#f97316; margin-bottom:12px;">🚀 미사일 피하기</h3>';
+
+    if (data.phase === 'setup') {
+        html += '<p style="color:#cbd5e1; margin-bottom:15px; font-size:0.9rem;">' +
+                '떨어지는 미사일을 피해 최대한 오래 버티세요.<br>각자 한 판씩 플레이합니다.</p>' +
+                '<div style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;">';
+        Object.keys(MISSILE_LEVELS).forEach(key => {
+            const on = key === level;
+            html += '<button class="btn" ' + (window.isHost ? '' : 'disabled') +
+                    ' style="flex:1; padding:12px; font-size:0.95rem; opacity:' + (window.isHost ? 1 : 0.6) + ';' +
+                    ' background:' + (on ? '#f97316' : '#374151') + '; color:white;"' +
+                    ' onclick="window.setMissileLevel(\'' + key + '\')">' + MISSILE_LEVELS[key].label + '</button>';
+        });
+        html += '</div>';
+
+        if (window.isHost) {
+            html += '<button class="btn primary" style="width:100%; padding:15px; font-size:1.1rem;"' +
+                    ' onclick="window.firebaseUpdate(window.firebaseRef(window.db, \'rooms/\' + window.myRoom), { phase: \'playing\' })">' +
+                    '게임 시작!</button>';
+        } else {
+            html += '<p style="color:#94a3b8;">방장이 난이도를 고르는 중...</p>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // phase === 'playing' : 각자 자기 차례를 직접 시작
+    html += '<p style="color:#94a3b8; font-size:0.85rem; margin-bottom:12px;">난이도: ' +
+            '<b style="color:#f97316;">' + MISSILE_LEVELS[level].label + '</b>' +
+            ' · 손가락(또는 마우스)을 좌우로 움직여 피하세요</p>';
+
+    if (myScore) {
+        html += '<div style="margin-bottom:12px; padding:12px; border-radius:10px; background:rgba(74,222,128,0.12); border:1px solid #4ade80;">' +
+                '<span style="color:#4ade80;">내 기록 <b style="font-size:1.3rem;">' + msToSec(myScore.ms) + '초</b> ' +
+                '<span style="color:#94a3b8; font-size:0.8rem;">(' + (myScore.tries || 1) + '번 도전)</span></span></div>';
+    }
+
+    html += '<div id="missile-stage" style="position:relative; display:inline-block; width:100%; max-width:400px;">' +
+                '<canvas id="missile-canvas" style="width:100%; display:block; border-radius:12px; background:#0b1120;' +
+                ' border:2px solid #334155; touch-action:none; cursor:none;"></canvas>' +
+            '</div>' +
+            '<button class="btn primary" style="width:100%; padding:15px; font-size:1.15rem; margin-top:12px; background:#f97316;"' +
+            ' onclick="window.startMissileRound()">' + (myScore ? '🔁 다시 도전하기' : '▶ 내 차례 시작하기') + '</button>';
+
+    if (window.isHost) {
+        html += '<button class="btn secondary" style="width:100%; margin-top:8px; background:#4b5563;"' +
+                ' onclick="window.resetMissileScores()">기록 초기화</button>';
+    }
+
+    html += '</div>';
+    html += '<div id="missile-board">' + missileBoardHtml(data) + '</div>';
+    return html;
+}
+
+window.setMissileLevel = function(key) {
+    if (!window.isHost) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { missileLevel: key });
+};
+
+window.resetMissileScores = function() {
+    if (!window.isHost) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { missileScores: null });
+};
+
+// ---- 게임 루프 ----
+window._missileRunning = false;
+
+window.startMissileRound = function() {
+    const canvas = document.getElementById('missile-canvas');
+    if (!canvas || window._missileRunning) return;
+
+    const data = window._missileData || {};
+    const cfg = MISSILE_LEVELS[data.missileLevel] || MISSILE_LEVELS.normal;
+
+    // 캔버스 해상도를 화면 밀도에 맞춘다 (모바일에서 선명하게)
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 360;
+    const cssH = Math.round(cssW * 1.25);
+    canvas.style.height = cssH + 'px';
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const W = cssW, H = cssH;
+    const ship = { x: W / 2, y: H - 34, r: 11 };
+    let missiles = [];
+    let lastFrame = performance.now();
+    let elapsed = 0;          // 실제로 플레이한 시간만 누적 (벽시계 시간 아님)
+    let nextSpawn = 0;        // elapsed 기준
+    let running = true;
+    window._missileRunning = true;
+
+    // ---- 입력 ----
+    function pointerX(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+        return clientX - rect.left;
+    }
+    function onMove(e) {
+        if (!running) return;
+        e.preventDefault();
+        ship.x = Math.max(ship.r, Math.min(W - ship.r, pointerX(e)));
+    }
+    function onKey(e) {
+        if (!running) return;
+        if (e.key === 'ArrowLeft') ship.x = Math.max(ship.r, ship.x - 22);
+        if (e.key === 'ArrowRight') ship.x = Math.min(W - ship.r, ship.x + 22);
+    }
+    canvas.addEventListener('pointermove', onMove, { passive: false });
+    canvas.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('keydown', onKey);
+
+    function cleanup() {
+        canvas.removeEventListener('pointermove', onMove);
+        canvas.removeEventListener('touchmove', onMove);
+        window.removeEventListener('keydown', onKey);
+    }
+    window._missileCleanup = cleanup;
+
+    // ---- 그리기 ----
+    function drawShip() {
+        ctx.save();
+        ctx.translate(ship.x, ship.y);
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(0, -ship.r);
+        ctx.lineTo(ship.r * 0.9, ship.r);
+        ctx.lineTo(0, ship.r * 0.5);
+        ctx.lineTo(-ship.r * 0.9, ship.r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawMissile(m) {
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        // 불꽃 (위쪽)
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.moveTo(-m.w / 2, -m.h / 2);
+        ctx.lineTo(m.w / 2, -m.h / 2);
+        ctx.lineTo(0, -m.h / 2 - 9);
+        ctx.closePath();
+        ctx.fill();
+        // 몸통
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-m.w / 2, -m.h / 2, m.w, m.h * 0.75);
+        // 탄두 (아래쪽)
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath();
+        ctx.moveTo(-m.w / 2, m.h * 0.25);
+        ctx.lineTo(m.w / 2, m.h * 0.25);
+        ctx.lineTo(0, m.h / 2 + 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawHud(elapsed) {
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(msToSec(elapsed) + '초', W / 2, 38);
+    }
+
+    function gameOver(elapsed) {
+        running = false;
+        window._missileRunning = false;
+        cleanup();
+
+        ctx.fillStyle = 'rgba(239,68,68,0.35)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.fillText('💥 격추!', W / 2, H / 2 - 14);
+        ctx.font = 'bold 40px sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(msToSec(elapsed) + '초', W / 2, H / 2 + 34);
+
+        submitMissileScore(elapsed);
+    }
+
+    function loop(now) {
+        if (!running) return;
+        // dt를 제한해 두면 (1) 미사일 순간이동을 막고
+        // (2) 앱을 내렸다 올려도 그 시간이 기록에 더해지지 않는다 = 백그라운드 치트 방지
+        const dt = Math.min(now - lastFrame, 50);
+        lastFrame = now;
+        elapsed += dt;
+        const mult = 1 + elapsed * cfg.ramp;
+
+        // 생성
+        if (elapsed >= nextSpawn) {
+            const w = 12 + Math.random() * 10;
+            missiles.push({
+                x: w / 2 + Math.random() * (W - w),
+                y: -20,
+                w: w,
+                h: 26,
+                vy: cfg.speed * mult * (0.85 + Math.random() * 0.4)
+            });
+            nextSpawn = elapsed + Math.max(130, cfg.spawnMs / mult) * (0.7 + Math.random() * 0.6);
+        }
+
+        // 이동 + 충돌
+        for (let i = missiles.length - 1; i >= 0; i--) {
+            const m = missiles[i];
+            m.y += m.vy * (dt / 16.67);
+            if (m.y - m.h > H) { missiles.splice(i, 1); continue; }
+
+            // 원(우주선) vs 사각형(미사일) — 판정은 살짝 후하게
+            const hr = ship.r * 0.75;
+            const cx = Math.max(m.x - m.w / 2, Math.min(ship.x, m.x + m.w / 2));
+            const cy = Math.max(m.y - m.h / 2, Math.min(ship.y, m.y + m.h / 2));
+            const dx = ship.x - cx, dy = ship.y - cy;
+            if (dx * dx + dy * dy < hr * hr) {
+                ctx.clearRect(0, 0, W, H);
+                missiles.forEach(drawMissile);
+                drawShip();
+                gameOver(elapsed);
+                return;
+            }
+        }
+
+        // 렌더
+        ctx.clearRect(0, 0, W, H);
+        missiles.forEach(drawMissile);
+        drawShip();
+        drawHud(elapsed);
+
+        requestAnimationFrame(loop);
+    }
+
+    // 3-2-1 카운트다운 후 시작
+    let count = 3;
+    (function countdown() {
+        if (!window._missileRunning) return; // 중간에 취소된 경우
+        ctx.clearRect(0, 0, W, H);
+        drawShip();
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 64px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(count > 0 ? String(count) : 'GO!', W / 2, H / 2);
+        if (count-- > 0) {
+            setTimeout(countdown, 700);
+        } else {
+            lastFrame = performance.now();
+            elapsed = 0;
+            nextSpawn = 400;
+            requestAnimationFrame(loop);
+        }
+    })();
+};
+
+// 방장이 게임을 바꾸는 등 중간에 끊길 때
+window.stopMissileGame = function() {
+    window._missileRunning = false;
+    if (window._missileCleanup) { window._missileCleanup(); window._missileCleanup = null; }
+};
+
+function submitMissileScore(elapsedMs) {
+    if (!window.myRoom || !window.db) return;
+    const ms = Math.round(elapsedMs);
+    const allScores = (window._missileData && window._missileData.missileScores) || {};
+    const prev = allScores[window.myPlayerId];
+    const best = (prev && prev.ms > ms) ? prev.ms : ms;
+    const tries = ((prev && prev.tries) || 0) + 1;
+
+    window.firebaseUpdate(
+        window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/missileScores/' + window.myPlayerId),
+        {
+            name: (window.players[window.myPlayerId] || {}).name || '?',
+            ms: best,
+            last: ms,
+            tries: tries
+        }
+    );
+}

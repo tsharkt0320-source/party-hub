@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="referrer" content="no-referrer">
     <title>Party Hub</title>
-    <link rel="stylesheet" href="style.css?v=8">
+    <link rel="stylesheet" href="style.css?v=10">
     
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, remove, get, child } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, update, remove, get, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
         // 사용자 Firebase 설정
         const firebaseConfig = {
@@ -36,6 +37,28 @@
             window.firebaseRemove = remove;
             window.firebaseGet = get;
             window.firebaseChild = child;
+            window.firebaseOnDisconnect = onDisconnect;
+
+            // 익명 로그인 — 사용자는 아무것도 하지 않는다.
+            // 페이지를 실제로 연 기기에만 출입증이 발급되므로,
+            // DB 주소만 아는 외부인/스크립트는 접근이 차단된다.
+            const auth = getAuth(app);
+            window.auth = auth;
+            window.authReady = new Promise((resolve) => {
+                let done = false;
+                const finish = (v) => { if (!done) { done = true; resolve(v); } };
+
+                onAuthStateChanged(auth, (user) => { if (user) finish(user); });
+
+                signInAnonymously(auth).catch((err) => {
+                    console.error('익명 로그인 실패:', err && err.code, err);
+                    window.authError = (err && err.code) || 'unknown';
+                    finish(null);
+                });
+
+                // 네트워크가 느려도 앱이 영영 안 뜨는 일은 없도록
+                setTimeout(() => finish(null), 8000);
+            });
         } else {
             console.error("Firebase config is missing!");
         }
@@ -47,6 +70,11 @@
         <div id="screen-home" class="screen active">
             <h1>🎉 파티 허브 🎉</h1>
             <p style="font-size: 0.9rem; color: #666; margin-bottom: 30px;">친구들과 다양한 게임을 즐겨보세요</p>
+            <div id="resume-box" style="display:none; margin-bottom:25px; padding:16px; border-radius:12px; background:rgba(74,222,128,0.12); border:1px solid #4ade80;">
+                <p id="resume-text" style="color:#bbf7d0; font-size:0.9rem; margin-bottom:12px; line-height:1.5;"></p>
+                <button id="btn-resume" class="btn primary" style="width:100%; padding:14px; background:#16a34a;">🔄 다시 들어가기</button>
+                <button id="btn-resume-dismiss" class="btn secondary" style="width:100%; padding:10px; margin-top:8px; background:#374151; font-size:0.85rem;">아니요, 새로 시작할래요</button>
+            </div>
             <div class="btn-group" style="flex-direction: column; gap: 15px;">
                 <button id="nav-create" class="btn primary" style="padding: 20px; font-size: 1.2rem;">방 만들기</button>
                 <button id="nav-join" class="btn secondary" style="padding: 20px; font-size: 1.2rem;">방 접속하기</button>
@@ -68,6 +96,7 @@
         <div id="screen-join" class="screen">
             <button class="btn-float-back nav-back">◁</button>
             <h2>방 접속하기</h2>
+            <div id="invite-banner" style="display:none; margin-bottom:15px; padding:14px; border-radius:12px; background:rgba(59,130,246,0.12); border:1px solid #3b82f6; color:#dbeafe; font-size:0.95rem; line-height:1.5;"></div>
             <div class="input-group">
                 <input type="text" id="join-nickname" placeholder="사용할 닉네임 입력" maxlength="8">
                 <input type="number" id="join-roomcode" placeholder="방 코드 (숫자 4자리)" pattern="\d*" maxlength="4">
@@ -80,7 +109,20 @@
         <div id="screen-lobby" class="screen">
             <button class="btn-float-back leave-room-btn">◁</button>
             <h2 id="lobby-room-code-display">방 코드: <span>----</span></h2>
-            
+
+            <!-- 초대 링크 -->
+            <div id="invite-box" style="margin:10px 0; padding:15px; background:rgba(59,130,246,0.08); border-radius:12px; border:1px solid rgba(59,130,246,0.4);">
+                <h4 style="color:#93c5fd; margin-bottom:10px; text-align:center;">🔗 친구 초대하기</h4>
+                <div id="invite-url" style="font-size:0.8rem; color:#cbd5e1; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; word-break:break-all; text-align:center; margin-bottom:10px;"></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn primary" style="flex:2; padding:12px; font-size:0.95rem;" onclick="window.shareInvite()">📤 링크 보내기</button>
+                    <button class="btn secondary" style="flex:1; padding:12px; font-size:0.95rem; background:#4b5563;" onclick="window.copyInvite()">📋 복사</button>
+                    <button class="btn secondary" style="flex:1; padding:12px; font-size:0.95rem; background:#4b5563;" onclick="window.toggleQr()">📱 QR</button>
+                </div>
+                <div id="qr-area" data-open="0" style="text-align:center; margin-top:12px;"></div>
+                <div id="invite-toast" style="display:none; margin-top:10px; text-align:center; color:#4ade80; font-size:0.85rem;"></div>
+            </div>
+
             <div id="team-picker-area" style="margin:10px 0; padding:15px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
                 <h4 style="color:#94a3b8; margin-bottom:10px; text-align:center;">⚔️ 팀 선택</h4>
             </div>
@@ -93,6 +135,10 @@
             <div id="host-controls" class="host-only">
                 <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                     <button id="btn-add-bot" class="btn secondary" style="background-color: #4b5563;">🤖 혼자 테스트용 봇 추가하기</button>
+                    <div id="host-transfer-area" style="margin-top:15px; text-align:left;">
+                        <label style="color:#cbd5e1; font-size:0.85rem;">👑 방장 넘기기</label>
+                        <select id="host-transfer-select" class="input-group input" style="width:100%; padding:8px; margin-top:5px;"></select>
+                    </div>
                 </div>
                 <h3>게임 선택 (방장 전용)</h3>
                 <div class="game-selector">
@@ -136,12 +182,12 @@
     </div>
 
     <!-- The main logic is loaded after the body and firebase -->
-    <script src="mafia.js?v=41"></script>
-    <script src="liar.js?v=41"></script>
-    <script src="quiz_db.js?v=41"></script>
-    <script src="quiz.js?v=41"></script>
-    <script src="minigames.js?v=41"></script>
-    <script type="module" src="app.js?v=41"></script>
+    <script src="mafia.js?v=47"></script>
+    <script src="liar.js?v=47"></script>
+    <script src="quiz_db.js?v=47"></script>
+    <script src="quiz.js?v=47"></script>
+    <script src="minigames.js?v=47"></script>
+    <script type="module" src="app.js?v=47"></script>
     <!-- Add CSS cache bust -->
 </body>
 </html>
