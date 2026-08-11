@@ -31,6 +31,7 @@ window.updateMinigames = function(data) {
                         <button class="btn secondary" onclick="startMinigame('arrow')">🎯 화살표돌리기</button>
                         <button class="btn secondary" onclick="startMinigame('draw')">🎁 당첨자추첨</button>
                         <button class="btn secondary" style="grid-column:1 / -1; background:#7c2d12;" onclick="startMinigame('missile')">🚀 미사일 피하기 (기록 대결)</button>
+                        <button class="btn secondary" style="grid-column:1 / -1; background:#4f46e5; border-color:#6366f1;" onclick="window.open('zombie.html', '_blank')">🧟 네온 좀비 서바이버 (싱글플레이)</button>
                     </div>
                 </div>
             `;
@@ -39,6 +40,7 @@ window.updateMinigames = function(data) {
                 <div style="text-align:center; margin-top:30px;">
                     <h3 style="color:#fbbf24;">⏳ 방장이 미니게임을 고르고 있습니다...</h3>
                     <p style="color:#94a3b8; margin-top:10px;">(사다리타기, 룰렛 등)</p>
+                    <button class="btn secondary" style="width:100%; margin-top:20px; background:#4f46e5; border-color:#6366f1;" onclick="window.open('zombie.html', '_blank')">🧟 네온 좀비 서바이버 (싱글플레이)</button>
                 </div>
             `;
         }
@@ -896,9 +898,14 @@ function renderMissile(data) {
 
     html += '<div id="missile-stage" style="position:relative; display:inline-block; width:100%; max-width:400px;">' +
                 '<canvas id="missile-canvas" style="width:100%; display:block; border-radius:12px; background:#0b1120;' +
-                ' border:2px solid #334155; touch-action:none; cursor:none;"></canvas>' +
+                ' border:2px solid #334155; touch-action:none;"></canvas>' +
             '</div>' +
-            '<button class="btn primary" style="width:100%; padding:15px; font-size:1.15rem; margin-top:12px; background:#f97316;"' +
+            '<div style="display:flex; justify-content:center; margin-top:15px; touch-action:none; user-select:none;">' +
+                '<div id="joystick-base" style="position:relative; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.08); border:2px solid #475569;">' +
+                    '<div id="joystick-knob" style="position:absolute; top:35px; left:35px; width:50px; height:50px; border-radius:50%; background:#38bdf8; box-shadow:0 0 10px rgba(56,189,248,0.5); pointer-events:none;"></div>' +
+                '</div>' +
+            '</div>' +
+            '<button class="btn primary" style="width:100%; padding:15px; font-size:1.15rem; margin-top:15px; background:#f97316;"' +
             ' onclick="window.startMissileRound()">' + (myScore ? '🔁 다시 도전하기' : '▶ 내 차례 시작하기') + '</button>';
 
     if (window.isHost) {
@@ -943,38 +950,93 @@ window.startMissileRound = function() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const W = cssW, H = cssH;
-    const ship = { x: W / 2, y: H - 34, r: 11 };
+    const ship = { x: W / 2, y: H / 2, r: 11, speed: 250 };
+    let shipAngle = -Math.PI / 2;
     let missiles = [];
     let lastFrame = performance.now();
-    let elapsed = 0;          // 실제로 플레이한 시간만 누적 (벽시계 시간 아님)
-    let nextSpawn = 0;        // elapsed 기준
+    let elapsed = 0;          
+    let nextSpawn = 0;        
     let running = true;
     window._missileRunning = true;
 
-    // ---- 입력 ----
-    function pointerX(e) {
-        const rect = canvas.getBoundingClientRect();
-        const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
-        return clientX - rect.left;
+    // ---- 조이스틱 & 키보드 입력 ----
+    let joyActive = false;
+    let joyVector = { x: 0, y: 0 };
+    const base = document.getElementById('joystick-base');
+    const knob = document.getElementById('joystick-knob');
+    let onJoyMoveFn, onJoyEndFn;
+    
+    if (base && knob) {
+        let baseCenter = { x: 0, y: 0 };
+        const baseRadius = 60;
+        const knobRadius = 25;
+        
+        function updateJoy(cx, cy) {
+            let dx = cx - baseCenter.x;
+            let dy = cy - baseCenter.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            let maxDist = baseRadius - knobRadius;
+            
+            if (dist > maxDist) {
+                dx = (dx/dist) * maxDist;
+                dy = (dy/dist) * maxDist;
+            }
+            knob.style.transform = `translate(${dx}px, ${dy}px)`;
+            joyVector.x = dx / maxDist;
+            joyVector.y = dy / maxDist;
+        }
+        
+        function onJoyStart(e) {
+            if (!running) return;
+            if (e.type === 'touchstart') e.preventDefault(); // 화면 스크롤 방지
+            joyActive = true;
+            const rect = base.getBoundingClientRect();
+            baseCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+            let cx = e.touches ? e.touches[0].clientX : e.clientX;
+            let cy = e.touches ? e.touches[0].clientY : e.clientY;
+            updateJoy(cx, cy);
+        }
+        
+        onJoyMoveFn = function(e) {
+            if (!joyActive || !running) return;
+            if (e.type === 'touchmove') e.preventDefault();
+            let cx = e.touches ? e.touches[0].clientX : e.clientX;
+            let cy = e.touches ? e.touches[0].clientY : e.clientY;
+            updateJoy(cx, cy);
+        };
+        
+        onJoyEndFn = function(e) {
+            if (!joyActive) return;
+            joyActive = false;
+            joyVector = { x: 0, y: 0 };
+            knob.style.transform = `translate(0px, 0px)`;
+        };
+        
+        base.addEventListener('touchstart', onJoyStart, {passive: false});
+        base.addEventListener('mousedown', onJoyStart);
+        window.addEventListener('touchmove', onJoyMoveFn, {passive: false});
+        window.addEventListener('mousemove', onJoyMoveFn);
+        window.addEventListener('touchend', onJoyEndFn);
+        window.addEventListener('mouseup', onJoyEndFn);
     }
-    function onMove(e) {
-        if (!running) return;
-        e.preventDefault();
-        ship.x = Math.max(ship.r, Math.min(W - ship.r, pointerX(e)));
-    }
+
+    let keys = {};
     function onKey(e) {
         if (!running) return;
-        if (e.key === 'ArrowLeft') ship.x = Math.max(ship.r, ship.x - 22);
-        if (e.key === 'ArrowRight') ship.x = Math.min(W - ship.r, ship.x + 22);
+        keys[e.code] = e.type === 'keydown';
     }
-    canvas.addEventListener('pointermove', onMove, { passive: false });
-    canvas.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
 
     function cleanup() {
-        canvas.removeEventListener('pointermove', onMove);
-        canvas.removeEventListener('touchmove', onMove);
+        if (base) {
+            window.removeEventListener('touchmove', onJoyMoveFn);
+            window.removeEventListener('mousemove', onJoyMoveFn);
+            window.removeEventListener('touchend', onJoyEndFn);
+            window.removeEventListener('mouseup', onJoyEndFn);
+        }
         window.removeEventListener('keydown', onKey);
+        window.removeEventListener('keyup', onKey);
     }
     window._missileCleanup = cleanup;
 
@@ -982,6 +1044,7 @@ window.startMissileRound = function() {
     function drawShip() {
         ctx.save();
         ctx.translate(ship.x, ship.y);
+        ctx.rotate(shipAngle + Math.PI/2);
         ctx.shadowColor = '#38bdf8';
         ctx.shadowBlur = 12;
         ctx.fillStyle = '#38bdf8';
@@ -998,6 +1061,7 @@ window.startMissileRound = function() {
     function drawMissile(m) {
         ctx.save();
         ctx.translate(m.x, m.y);
+        ctx.rotate(m.angle - Math.PI/2);
         // 불꽃 (위쪽)
         ctx.fillStyle = '#fbbf24';
         ctx.beginPath();
@@ -1054,15 +1118,51 @@ window.startMissileRound = function() {
         elapsed += dt;
         const mult = 1 + elapsed * cfg.ramp;
 
+        // 우주선 이동 처리
+        let kx = 0, ky = 0;
+        if (keys['ArrowLeft'] || keys['KeyA']) kx -= 1;
+        if (keys['ArrowRight'] || keys['KeyD']) kx += 1;
+        if (keys['ArrowUp'] || keys['KeyW']) ky -= 1;
+        if (keys['ArrowDown'] || keys['KeyS']) ky += 1;
+        
+        let vx = joyActive ? joyVector.x : kx;
+        let vy = joyActive ? joyVector.y : ky;
+        
+        if (!joyActive && (vx !== 0 || vy !== 0)) {
+            let len = Math.sqrt(vx*vx + vy*vy);
+            vx /= len; vy /= len;
+        }
+        
+        if (vx !== 0 || vy !== 0) shipAngle = Math.atan2(vy, vx);
+        
+        ship.x += vx * ship.speed * (dt / 1000);
+        ship.y += vy * ship.speed * (dt / 1000);
+        ship.x = Math.max(ship.r, Math.min(W - ship.r, ship.x));
+        ship.y = Math.max(ship.r, Math.min(H - ship.r, ship.y));
+
         // 생성
         if (elapsed >= nextSpawn) {
             const w = 12 + Math.random() * 10;
+            const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+            let mx, my;
+            
+            // 중앙 근처를 목표로 하되 약간의 오차 적용
+            let targetX = W/2 + (Math.random()-0.5)*120;
+            let targetY = H/2 + (Math.random()-0.5)*120;
+
+            if (side === 0) { mx = Math.random()*W; my = -30; }
+            else if (side === 1) { mx = W+30; my = Math.random()*H; }
+            else if (side === 2) { mx = Math.random()*W; my = H+30; }
+            else { mx = -30; my = Math.random()*H; }
+            
+            let angle = Math.atan2(targetY - my, targetX - mx);
+            let speed = cfg.speed * mult * (0.85 + Math.random() * 0.4) * 80;
+            
             missiles.push({
-                x: w / 2 + Math.random() * (W - w),
-                y: -20,
-                w: w,
-                h: 26,
-                vy: cfg.speed * mult * (0.85 + Math.random() * 0.4)
+                x: mx, y: my, w: w, h: 26,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                angle: angle
             });
             nextSpawn = elapsed + Math.max(130, cfg.spawnMs / mult) * (0.7 + Math.random() * 0.6);
         }
@@ -1070,14 +1170,18 @@ window.startMissileRound = function() {
         // 이동 + 충돌
         for (let i = missiles.length - 1; i >= 0; i--) {
             const m = missiles[i];
-            m.y += m.vy * (dt / 16.67);
-            if (m.y - m.h > H) { missiles.splice(i, 1); continue; }
+            m.x += m.vx * (dt / 1000);
+            m.y += m.vy * (dt / 1000);
+            
+            // 화면 밖으로 완전히 나가면 삭제
+            if (m.x < -100 || m.x > W+100 || m.y < -100 || m.y > H+100) { 
+                missiles.splice(i, 1); 
+                continue; 
+            }
 
-            // 원(우주선) vs 사각형(미사일) — 판정은 살짝 후하게
-            const hr = ship.r * 0.75;
-            const cx = Math.max(m.x - m.w / 2, Math.min(ship.x, m.x + m.w / 2));
-            const cy = Math.max(m.y - m.h / 2, Math.min(ship.y, m.y + m.h / 2));
-            const dx = ship.x - cx, dy = ship.y - cy;
+            // 원(우주선) vs 점(미사일 중심) 충돌 — 모바일 난이도 고려 살짝 후하게
+            const hr = ship.r * 0.6;
+            const dx = ship.x - m.x, dy = ship.y - m.y;
             if (dx * dx + dy * dy < hr * hr) {
                 ctx.clearRect(0, 0, W, H);
                 missiles.forEach(drawMissile);
