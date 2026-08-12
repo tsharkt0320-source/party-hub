@@ -1,5 +1,17 @@
 // quiz.js
 
+// 문제가 바뀔 때마다 번호를 올린다.
+// 이전 문제의 타이머가 살아남아 새 문제에 '실패'를 써버리는 사고를 막기 위함.
+window._quizRound = 0;
+
+function newQuizRound() {
+    window._quizRound = (window._quizRound || 0) + 1;
+    if (window._quizBuzzerIv) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; }
+    if (window._quizWords4Iv) { clearInterval(window._quizWords4Iv); window._quizWords4Iv = null; }
+    return window._quizRound;
+}
+window.newQuizRound = newQuizRound;
+
 function getCategoriesForMode(mode) {
     if (!window.QUIZ_DB[mode]) return ['랜덤'];
     const cats = Object.keys(window.QUIZ_DB[mode]);
@@ -462,6 +474,8 @@ window.resetQuizScores = function() {
 // === GAME ACTIONS ===
 window.startQuizGame = async function() {
     if (!window.isHost && !window._isCaptain) return;
+    // 새 문제를 내는 순간 이전 문제의 타이머를 모두 무효화한다
+    const round = newQuizRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snapshot = await window.firebaseGet(roomRef);
     const data = snapshot.val();
@@ -477,9 +491,10 @@ window.startQuizGame = async function() {
             buzzer_countdown: 3, buzzer_active: false, buzzer_winner: null
         });
         let c = 3;
-        let iv = setInterval(() => {
+        window._quizBuzzerIv = setInterval(() => {
+            if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
             c--;
-            if (c <= 0) { clearInterval(iv); window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
+            if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
             else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
         }, 1000);
         return;
@@ -538,19 +553,23 @@ window.startQuizGame = async function() {
 
     if (useBuzzer) {
         let c = 3;
-        let iv = setInterval(() => {
+        window._quizBuzzerIv = setInterval(() => {
+            if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
             c--;
-            if (c <= 0) { clearInterval(iv); window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
+            if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
             else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
         }, 1000);
     }
     
     if (isWords4) {
         let t = timerSec;
-        let iv = setInterval(() => {
+        window._quizWords4Iv = setInterval(() => {
+            // 다음 문제로 넘어갔거나 이미 정답 처리됐으면 아무것도 쓰지 않는다
+            if (window._quizRound !== round) { clearInterval(window._quizWords4Iv); return; }
             t--;
             if (t <= 0) {
-                clearInterval(iv);
+                clearInterval(window._quizWords4Iv);
+                window._quizWords4Iv = null;
                 window.firebaseUpdate(roomRef, { words4_timer: 0, words4_failed: true });
             } else {
                 window.firebaseUpdate(roomRef, { words4_timer: t });
@@ -573,7 +592,8 @@ window.submitGuess = async function(correctAnswer) {
         let pts = d.win_points || 1;
         indScores[window.myPlayerId] = (indScores[window.myPlayerId] || 0) + pts;
         gScores[window.myPlayerId] = (gScores[window.myPlayerId] || 0) + pts;
-        window.firebaseUpdate(roomRef, { winner: window.myPlayerId, individualScores: indScores, globalScores: gScores });
+        newQuizRound(); // 정답이 나왔으니 남은 제한시간 타이머를 무효화
+        window.firebaseUpdate(roomRef, { winner: window.myPlayerId, individualScores: indScores, globalScores: gScores, words4_timer: 0 });
     } else {
         alert("틀렸습니다! 다시 시도하세요.");
         input.value = '';
@@ -611,11 +631,13 @@ window.hostBuzzerWrong = async function() {
 
 window.resetBuzzerOnly = async function() {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
+    const round = newQuizRound();
     window.firebaseUpdate(roomRef, { buzzer_countdown: 3, buzzer_active: false, buzzer_winner: null });
     let c = 3;
-    let iv = setInterval(() => {
+    window._quizBuzzerIv = setInterval(() => {
+        if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
         c--;
-        if (c <= 0) { clearInterval(iv); window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
+        if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
         else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
     }, 1000);
 };
@@ -651,6 +673,7 @@ window.hostForceCorrect = async function() {
 };
 
 window.backToQuizLobby = function() {
+    newQuizRound(); // 진행 중이던 타이머 정리
     if (!window.isHost) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
         quizState: null, question: null, answer: null, img: null, hints: null,
