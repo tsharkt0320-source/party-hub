@@ -548,58 +548,60 @@ function updatePlayerList() {
 function renderTeamPicker(data) {
     const container = document.getElementById('team-picker-area');
     if (!container) return;
+
     const globalTeams = data.globalTeams || {};
-    const teamAName = data.teamAName || 'A팀';
-    const teamBName = data.teamBName || 'B팀';
     const captain = data.captain || null;
     const keys = Object.keys(players);
-    const teamA = keys.filter(id => (globalTeams[id] || 'A') === 'A');
-    const teamB = keys.filter(id => globalTeams[id] === 'B');
-    
-    let html = '';
-    if (isHost) {
-        html += `<div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="team-a-name" value="${escapeHtml(teamAName)}" placeholder="A팀 이름" style="flex:1; padding:8px; border-radius:6px; border:1px solid #3b82f6; background:rgba(59,130,246,0.1); color:white; text-align:center;" onchange="window.setTeamName('A', this.value)">
-                    <input type="text" id="team-b-name" value="${escapeHtml(teamBName)}" placeholder="B팀 이름" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ef4444; background:rgba(239,68,68,0.1); color:white; text-align:center;" onchange="window.setTeamName('B', this.value)">
-                 </div>`;
+    const myTeam = globalTeams[myPlayerId] || 'A';
+
+    const TEAMS = [
+        { id: 'A', name: data.teamAName || 'A팀', color: '#3b82f6', bg: 'rgba(59,130,246,0.10)' },
+        { id: 'B', name: data.teamBName || 'B팀', color: '#ef4444', bg: 'rgba(239,68,68,0.10)' }
+    ];
+
+    // 팀 하나를 그린다. 이름 입력칸을 카드 안에 넣어 이름이 두 번 보이지 않게 한다.
+    const renderTeam = (t) => {
+        const members = keys.filter(id => (globalTeams[id] || 'A') === t.id);
+        const isMine = myTeam === t.id;
+
+        const header = isHost
+            ? `<input type="text" class="team-name-input" value="${escapeHtml(t.name)}"
+                      placeholder="${t.id}팀 이름" style="border-color:${t.color};"
+                      onchange="window.setTeamName('${t.id}', this.value)">`
+            : `<div class="team-name-input" style="border-color:${t.color}; color:${t.color};">${escapeHtml(t.name)}</div>`;
+
+        const list = members.map(id => `
+            <div class="team-member" style="background:${t.color}22;">
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${escapeHtml(players[id]?.name || id)}${id === myPlayerId ? ' <b style="color:#fbbf24;">(나)</b>' : ''}
+                </span>
+                ${captain === id ? '<span style="color:#fbbf24; font-size:0.7rem; flex-shrink:0;">👑</span>' : ''}
+            </div>`).join('') || `<div style="color:#64748b; font-size:0.8rem; text-align:center; padding:10px 0;">비어 있음</div>`;
+
+        const btn = isMine
+            ? `<button class="btn" style="width:100%; padding:9px; font-size:0.88rem; margin-top:8px;
+                       background:${t.color}33; border:1px solid ${t.color}; color:${t.color}; cursor:default;" disabled>✓ 참여 중</button>`
+            : `<button class="btn" style="width:100%; padding:9px; font-size:0.88rem; margin-top:8px; background:${t.color};"
+                       onclick="window.joinTeam('${t.id}')">들어가기</button>`;
+
+        return `<div class="team-card" style="border-color:${t.color}; background:${t.bg};">
+                    ${header}
+                    <div style="text-align:center; color:${t.color}; font-size:0.75rem; margin:6px 0 8px;">${members.length}명</div>
+                    <div style="flex:1;">${list}</div>
+                    ${btn}
+                </div>`;
+    };
+
+    container.innerHTML = `<h4 style="color:#94a3b8; margin-bottom:10px; text-align:center;">⚔️ 팀 선택</h4>
+                           <div class="team-grid">${TEAMS.map(renderTeam).join('')}</div>`;
+
+    // 팀장 지정은 방장 도구 안에 있다 (로비를 어지럽히지 않도록)
+    const capSel = document.getElementById('captain-select');
+    if (capSel && isHost) {
+        capSel.innerHTML = '<option value="">없음</option>' +
+            keys.map(id => `<option value="${escapeHtml(id)}" ${captain === id ? 'selected' : ''}>${escapeHtml(players[id]?.name || id)}</option>`).join('');
+        capSel.onchange = function() { window.setCaptain(this.value); };
     }
-    html += `<div style="display:flex; gap:10px; min-height:120px;">
-                <div style="flex:1; display:flex; flex-direction:column; background:rgba(59,130,246,0.1); border:2px solid #3b82f6; border-radius:12px; padding:10px;">
-                    <div style="text-align:center; font-weight:bold; color:#3b82f6; margin-bottom:8px;">${escapeHtml(teamAName)}</div>
-                    <div style="flex:1;">`;
-    teamA.forEach(id => {
-        let isCap = captain === id;
-        html += `<div style="padding:4px 8px; margin-bottom:3px; border-radius:6px; background:rgba(59,130,246,0.2); font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
-                    <span>${escapeHtml(players[id]?.name || id)} ${id === myPlayerId ? '(나)' : ''}</span>
-                    ${isCap ? '<span style="color:#fbbf24; font-size:0.7rem;">👑팀장</span>' : ''}
-                 </div>`;
-    });
-    html += `       </div>
-                    <button class="btn primary" style="width:100%; padding:8px; font-size:0.9rem; margin-top:10px;" onclick="window.joinTeam('A')">A팀 들어가기</button>
-                </div>
-                <div style="flex:1; display:flex; flex-direction:column; background:rgba(239,68,68,0.1); border:2px solid #ef4444; border-radius:12px; padding:10px;">
-                    <div style="text-align:center; font-weight:bold; color:#ef4444; margin-bottom:8px;">${escapeHtml(teamBName)}</div>
-                    <div style="flex:1;">`;
-    teamB.forEach(id => {
-        let isCap = captain === id;
-        html += `<div style="padding:4px 8px; margin-bottom:3px; border-radius:6px; background:rgba(239,68,68,0.2); font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
-                    <span>${escapeHtml(players[id]?.name || id)} ${id === myPlayerId ? '(나)' : ''}</span>
-                    ${isCap ? '<span style="color:#fbbf24; font-size:0.7rem;">👑팀장</span>' : ''}
-                 </div>`;
-    });
-    html += `       </div>
-                    <button class="btn danger" style="width:100%; padding:8px; font-size:0.9rem; margin-top:10px; background:#ef4444; color:white;" onclick="window.joinTeam('B')">B팀 들어가기</button>
-                </div>
-             </div>`;
-    if (isHost) {
-        html += `<div style="margin-top:10px;"><label style="color:#cbd5e1; font-size:0.85rem;">👑 팀장 지정</label>
-                    <select id="captain-select" class="input-group input" style="width:100%; padding:8px; margin-top:5px;" onchange="window.setCaptain(this.value)">
-                        <option value="">없음</option>
-                        ${keys.map(id => `<option value="${id}" ${captain===id?'selected':''}>${escapeHtml(players[id]?.name || id)}</option>`).join('')}
-                    </select>
-                 </div>`;
-    }
-    container.innerHTML = html;
 }
 
 window.joinTeam = function(team) {

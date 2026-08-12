@@ -171,10 +171,21 @@ window.updateQuiz = function(data) {
                 html += `</div>`;
             }
 
-            html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:15px;" onclick="window.startQuizGame()">🚀 ${selectedMode === 'buzzer_only' ? '부저 시작' : '문제 출제하기'}</button>
+            html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:16px;" onclick="window.startQuizGame()">🚀 ${selectedMode === 'buzzer_only' ? '부저 시작' : '문제 출제하기'}</button>
                 </div>
-                <button class="btn secondary" style="width:100%; margin-top:10px;" onclick="window.resetQuizScores()">점수 초기화</button>
-                <button class="btn" style="width:100%; margin-top:10px; background:#7f1d1d; color:white;" onclick="window.resetUsedQuestions()">🔄 사용된 문제 내역 초기화</button>
+                <details class="host-tools">
+                    <summary>🧹 초기화</summary>
+                    <div class="tool-body">
+                        <div class="btn-row">
+                            <button class="btn secondary" onclick="window.resetQuizScores()">점수 초기화</button>
+                            <button class="btn" style="background:#7f1d1d;" onclick="window.resetUsedQuestions()">문제 내역 초기화</button>
+                        </div>
+                        <p style="color:#64748b; font-size:0.78rem; margin-top:8px; line-height:1.5;">
+                            점수 초기화: 팀·개인 점수를 0으로<br>
+                            문제 내역 초기화: 이미 나온 문제를 다시 나오게
+                        </p>
+                    </div>
+                </details>
             `;
         } else {
             // Guest view
