@@ -47,7 +47,7 @@ function hostRevealLiar(data) {
 window.updateLiar = function(data) {
     mergeLiarSecret(data);
     hostRevealLiar(data);
-    hostJudgeLiarGuess(data);
+    hostRunGuessJudging(data);
     const content = document.getElementById('liar-content');
     
     // 1. 대기실
@@ -235,7 +235,7 @@ window.updateLiar = function(data) {
     // 내 역할 카드 (게임 종료 전까지 항상 보임)
     if (data.liarState !== 'game_over') {
         if (data.gameMode === 'word_mafia') {
-            const myWord = myLiar ? myLiar.word : (isLiar ? data.liarFakeWord : data.word);
+            const myWord = (myLiar && myLiar.word) || (isLiar ? data.liarFakeWord : data.word) || '—';
             html += `
                 <div class="card">
                     <h3 style="color:#a855f7; margin-bottom:10px;">모드: [ 🤡 동상이몽 모드 ]</h3>
@@ -250,7 +250,7 @@ window.updateLiar = function(data) {
                 <div class="card">
                     <h3 style="color:#a855f7; margin-bottom:10px;">카테고리: [ ${data.category} ]</h3>
                     <div class="role-title" style="color: ${(isLiar || isSpy) ? 'var(--danger)' : 'var(--primary)'}; font-size:1.8rem; margin:10px 0;">
-                        ${isLiar ? '당신은 🤡 라이어입니다!' : (isSpy ? '당신은 🕵️ 스파이입니다!' : `제시어: <b>${myLiar ? myLiar.word : data.word}</b>`)}
+                        ${isLiar ? '당신은 🤡 라이어입니다!' : (isSpy ? '당신은 🕵️ 스파이입니다!' : `제시어: <b>${(myLiar && myLiar.word) || data.word || '—'}</b>`)}
                     </div>
                     ${isLiar ? '<p style="color:#aaa; font-size:0.9rem;">정체를 숨기고 눈치껏 아는 척 설명하세요!</p>' : ''}
                     ${isSpy ? `<p style="color:var(--danger); font-size:0.9rem; margin-top:5px;">진짜 라이어는 <b>[${myLiar ? myLiar.liarName : (window.players[data.liarId] || {}).name}]</b>님입니다!<br>정답은 <b>[${myLiar ? myLiar.realWord : data.word}]</b> 입니다.<br>라이어에게 은밀히 힌트를 주세요!</p>` : ''}
@@ -368,36 +368,90 @@ window.updateLiar = function(data) {
         }
     }
     
-    // Phase 5: 라이어의 추측 (liar_guess)
+    // Phase 5: 라이어가 정답을 외친다 (liar_guess)
     else if (data.liarState === 'liar_guess') {
-        // 스파이가 죽었든, 라이어가 죽었든 무조건 '진짜 라이어' 본인이 정답을 맞춤
+        const escf = window.escapeHtml || (x => x);
         if (isLiar) {
             html += `
                 <div class="card" style="border:2px solid var(--danger);">
-                    <h3 style="color:var(--danger); margin-bottom:15px;">🚨 정체가 탄로 났거나, 동료(스파이)가 죽었습니다!</h3>
-                    <p style="margin-bottom:15px;">마지막 기회입니다. 다수파의 진짜 제시어는 무엇일까요?</p>
-                    ${data.liarGuess
-                        ? `<div style="padding:14px; border-radius:10px; background:rgba(251,191,36,0.12); border:1px solid #fbbf24;">
-                               <div style="color:#fbbf24; font-size:0.85rem; margin-bottom:6px;">외친 정답</div>
-                               <div style="font-size:1.4rem; font-weight:900;">${(window.escapeHtml||(x=>x))(data.liarGuess)}</div>
-                               <div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">결과를 기다리는 중...</div>
-                           </div>`
-                        : `<div style="display:flex; flex-direction:column; gap:10px;">
-                               <input type="text" id="liar-guess-input" placeholder="정답 입력..." style="padding:15px; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1.2rem; text-align:center;" onkeypress="if(event.key==='Enter') window.submitLiarGuess()">
-                               <button id="liar-guess-btn" class="btn primary" onclick="window.submitLiarGuess()" style="padding:15px; font-size:1.1rem;">정답 외치기!</button>
-                           </div>`}
+                    <h3 style="color:var(--danger); margin-bottom:10px;">🚨 정체가 탄로났습니다.</h3>
+                    <p style="margin-bottom:14px; font-size:0.95rem;">마지막 기회입니다. 시민팀의 제시어는 무엇일까요?</p>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <input type="text" id="liar-guess-input" placeholder="정답 입력..."
+                               style="padding:15px; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1.2rem; text-align:center;"
+                               oninput="window.liarGuessTyping(this.value)"
+                               onkeypress="if(event.key==='Enter') window.submitLiarGuess()">
+                        <button id="liar-guess-btn" class="btn primary" onclick="window.submitLiarGuess()" style="padding:15px; font-size:1.1rem;">정답 외치기!</button>
+                    </div>
+                    <p style="color:#94a3b8; font-size:0.8rem; margin-top:10px;">시민팀이 여러분이 적는 내용을 실시간으로 보고 있습니다.</p>
                 </div>
             `;
         } else {
-            html += data.liarGuess
-                ? `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 <b>[${(window.escapeHtml||(x=>x))(data.liarGuess)}]</b> 라고 외쳤습니다! 판정 중...</div>`
-                : `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 진짜 제시어를 고민하고 있습니다... (틀리기를 기도하세요!)</div>`;
+            const draft = (data.liarGuessDraft || '').trim();
+            html += `<div class="card" style="border:2px solid var(--warning);">
+                        <h3 style="color:var(--warning); margin-bottom:10px;">🤡 라이어가 정답을 고민 중입니다</h3>
+                        <div style="padding:16px; border-radius:10px; background:rgba(0,0,0,0.3); min-height:56px; display:flex; align-items:center; justify-content:center;">
+                            <span style="font-size:1.5rem; font-weight:900; color:${draft ? '#fbbf24' : '#475569'};">
+                                ${draft ? escf(draft) : '입력을 기다리는 중...'}
+                            </span>
+                        </div>
+                        <p style="color:#94a3b8; font-size:0.82rem; margin-top:10px;">라이어가 적는 내용이 실시간으로 보입니다.</p>
+                     </div>`;
             if (window.isHost) {
-                html += `<button class="btn danger" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('timeout_guess')">시간 초과 (강제 오답 처리)</button>`;
+                html += `<button class="btn danger" style="width:100%; margin-top:12px;" onclick="window.liarHostAction('timeout_guess')">시간 초과 (오답 처리)</button>`;
             }
         }
     }
-    
+
+    // Phase 5-B: 시민팀이 정답 여부를 판정한다 (guess_judge)
+    else if (data.liarState === 'guess_judge') {
+        const escf = window.escapeHtml || (x => x);
+        // 라이어는 정확히 한 명이므로 총원-1 로 계산한다.
+        // (시민은 라이어가 누군지 모르므로 목록으로 빼면 화면마다 숫자가 달라진다)
+        const total = Math.max(0, Object.keys(window.players).length - 1);
+        const votes = data.guessVotes || {};
+        const yes = Object.values(votes).filter(v => v === true).length;
+        const no = Object.values(votes).filter(v => v === false).length;
+        const myVote = votes[window.myPlayerId];
+
+        html += `<div class="card" style="border:2px solid #fbbf24;">
+                    <div style="color:#fbbf24; font-size:0.85rem; margin-bottom:6px;">라이어가 외친 정답</div>
+                    <div style="font-size:2rem; font-weight:900; margin-bottom:4px;">${escf(data.liarGuess || '-')}</div>
+                 </div>`;
+
+        if (isLiar) {
+            html += `<div class="card info-text" style="color:#94a3b8;">시민팀이 정답인지 판정하고 있습니다...</div>`;
+        } else {
+            html += `<div class="card">
+                        <h3 style="margin-bottom:6px;">이게 정답이 맞나요?</h3>
+                        <p style="color:#94a3b8; font-size:0.85rem; margin-bottom:14px;">과반수가 정답이라고 하면 라이어가 이깁니다.</p>
+                        <div class="btn-row">
+                            <button class="btn" style="background:${myVote === true ? '#16a34a' : '#334155'};" onclick="window.judgeLiarGuess(true)">⭕ 정답이다</button>
+                            <button class="btn" style="background:${myVote === false ? '#b91c1c' : '#334155'};" onclick="window.judgeLiarGuess(false)">❌ 아니다</button>
+                        </div>
+                        ${myVote !== undefined ? `<p style="color:#94a3b8; font-size:0.82rem; margin-top:10px;">선택하셨습니다. 바꾸려면 다시 누르세요.</p>` : ''}
+                     </div>`;
+        }
+
+        html += `<div class="card" style="text-align:left;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#4ade80; font-weight:bold;">⭕ 정답 ${yes}</span>
+                        <span style="color:#f87171; font-weight:bold;">❌ 아니다 ${no}</span>
+                    </div>
+                    <div style="height:9px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; display:flex;">
+                        <div style="width:${total ? (yes / total) * 100 : 0}%; background:#4ade80;"></div>
+                        <div style="width:${total ? (no / total) * 100 : 0}%; background:#f87171;"></div>
+                    </div>
+                    <p style="color:#94a3b8; font-size:0.82rem; margin-top:8px;">
+                        ${yes + no} / ${total}명 판정 완료 · 정답 ${Math.floor(total / 2) + 1}표 이상이면 라이어 승리
+                    </p>
+                 </div>`;
+
+        if (window.isHost) {
+            html += `<button class="btn danger" style="width:100%; margin-top:12px;" onclick="window.liarHostAction('judge_guess')">지금 결과 확정하기</button>`;
+        }
+    }
+
     // Phase 6: 게임 종료 (game_over)
     else if (data.liarState === 'game_over') {
         const esc = window.escapeHtml || (x => x);
@@ -524,7 +578,24 @@ window.updateLiar = function(data) {
                  </div>`;
     }
 
+    // 실시간 갱신으로 입력칸이 다시 그려져도 적던 내용과 커서를 잃지 않게 한다
+    const prevInput = document.getElementById('liar-guess-input');
+    const savedVal = prevInput ? prevInput.value : null;
+    const savedPos = prevInput ? prevInput.selectionStart : null;
+    const hadFocus = prevInput && document.activeElement === prevInput;
+
     content.innerHTML = html;
+
+    if (savedVal !== null) {
+        const el = document.getElementById('liar-guess-input');
+        if (el) {
+            el.value = savedVal;
+            if (hadFocus) {
+                el.focus();
+                try { el.setSelectionRange(savedPos, savedPos); } catch (e) {}
+            }
+        }
+    }
 };
 
 // Player Action
@@ -535,53 +606,115 @@ window.submitLiarAction = function(actionKey, value) {
     }
 };
 
+// 라이어가 적는 내용을 시민팀이 실시간으로 볼 수 있게 흘려보낸다 (0.4초 간격)
+window.liarGuessTyping = function(text) {
+    clearTimeout(window._draftTimer);
+    window._draftTimer = setTimeout(() => {
+        if (!window.myRoom) return;
+        window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+            liarGuessDraft: String(text || '').slice(0, 40)
+        });
+    }, 400);
+};
+
 window.submitLiarGuess = function() {
     const input = document.getElementById('liar-guess-input');
     if (!input || !input.value.trim()) return;
+    clearTimeout(window._draftTimer);
 
-    // 라이어 화면에는 진짜 제시어가 없다(방장 전용 secret).
-    // 그래서 정답 여부는 제출만 하고 방장이 판정한다.
     const btn = document.getElementById('liar-guess-btn');
     if (btn) { btn.disabled = true; btn.innerText = '제출 중...'; }
 
+    // 정답 여부는 시민팀이 판정한다 (라이어 화면에는 진짜 제시어가 없다)
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
-        liarGuess: input.value.trim()
+        liarState: 'guess_judge',
+        liarGuess: input.value.trim(),
+        liarGuessDraft: null,
+        guessVotes: null
     });
 };
 
-// 방장만 진짜 제시어를 볼 수 있으므로, 판정도 방장이 한다.
-function hostJudgeLiarGuess(data) {
+// 시민팀 각자의 판정
+window.judgeLiarGuess = function(isCorrect) {
+    if (!window.myRoom || !window.myPlayerId) return;
+    window.firebaseUpdate(
+        window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/guessVotes'),
+        { [window.myPlayerId]: !!isCorrect }
+    );
+};
+
+// 방장이 진행을 돕는다: 봇 대신 판정해 주고, 전원 판정이 끝나면 결과를 확정한다.
+function hostRunGuessJudging(data) {
     if (!window.isHost || !window.myRoom) return;
-    if (data.liarState !== 'liar_guess' || !data.liarGuess) return;
+    if (data.liarState !== 'guess_judge') return;
 
     const sec = (window._secret && window._secret.liar) || null;
-    const actualRaw = (sec && sec.word) || data.word;
-    if (!actualRaw) return; // 아직 secret 을 못 받았으면 다음 스냅샷에서 다시 시도
+    const liarId = (sec && sec.liarId) || data.liarId;
+    const judges = Object.keys(window.players).filter(id => id !== liarId);
+    const votes = Object.assign({}, data.guessVotes || {});
 
-    if (window._judgingGuess === data.liarGuess) return; // 중복 판정 방지
-    window._judgingGuess = data.liarGuess;
-
+    // 봇은 진짜 제시어와 비교해서 대신 판정한다
+    const actual = (sec && sec.word) || data.word || '';
     const norm = (v) => String(v).replace(/\s/g, '').toLowerCase();
-    const correct = norm(data.liarGuess) === norm(actualRaw);
+    const botUpdates = {};
+    judges.forEach(id => {
+        if (!window.players[id].isBot) return;
+        if (votes[id] !== undefined) return;
+        const v = actual ? (norm(data.liarGuess) === norm(actual)) : false;
+        botUpdates[id] = v;
+        votes[id] = v;
+    });
+    if (Object.keys(botUpdates).length > 0) {
+        window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/guessVotes'), botUpdates);
+    }
+
+    // 전원 판정이 끝나면 확정
+    const done = judges.filter(id => votes[id] !== undefined).length;
+    if (judges.length === 0 || done < judges.length) return;
+    finalizeGuessJudging(data, votes, judges.length);
+}
+
+// 정답표가 과반수를 넘으면 라이어 승리, 아니면 시민팀 승리
+function finalizeGuessJudging(data, votes, totalJudges) {
+    const key = 'final:' + data.liarGuess + ':' + totalJudges;
+    if (window._judgingGuess === key) return; // 중복 확정 방지
+    window._judgingGuess = key;
+
+    const yes = Object.keys(votes).filter(k => votes[k] === true).length;
+    const liarWins = yes * 2 > totalJudges;
+    const sec = (window._secret && window._secret.liar) || null;
     const liarName = (window.players[(sec && sec.liarId) || data.liarId] || {}).name || '라이어';
-    const esc = window.escapeHtml || (x => x);
+    const escf = window.escapeHtml || (x => x);
 
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
         liarState: 'game_over',
-        winners: correct ? 'liar' : 'citizen',
-        guessResult: correct ? 'correct' : 'wrong',
-        liarGuess: null,
-        msg: correct
-            ? `<b>${esc(liarName)}</b>가 정답 <b>[${esc(data.liarGuess)}]</b>(을)를 맞혔습니다! 소름! 😱`
-            : `<b>${esc(liarName)}</b>가 오답 <b>[${esc(data.liarGuess)}]</b>(을)를 외치고 장렬히 전사했습니다! 🤣`
+        winners: liarWins ? 'liar' : 'citizen',
+        guessResult: liarWins ? 'correct' : 'wrong',
+        msg: liarWins
+            ? `<b>${escf(liarName)}</b>가 외친 <b>[${escf(data.liarGuess)}]</b> — 시민팀 ${yes}/${totalJudges}명이 정답으로 인정했습니다! 😱`
+            : `<b>${escf(liarName)}</b>가 외친 <b>[${escf(data.liarGuess)}]</b> — 정답 인정 ${yes}/${totalJudges}명에 그쳤습니다! 🤣`
     });
 }
 
 // Host Action
+// 각 명령이 유효한 단계. 투표 단계의 예약 타이머가 뒤늦게 실행돼
+// 이미 끝난 게임을 되돌리는 사고를 막는다.
+const LIAR_CMD_STATE = {
+    start_turn: ['role_reveal'],
+    next_turn: ['turn'],
+    resolve_vote: ['vote'],
+    timeout_guess: ['liar_guess', 'guess_judge'],
+    judge_guess: ['guess_judge']
+};
+
 window.liarHostAction = async function(command) {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snapshot = await window.firebaseGet(roomRef);
     const data = mergeLiarSecret(snapshot.val());
+
+    const allowed = LIAR_CMD_STATE[command];
+    if (allowed && allowed.indexOf(data.liarState) === -1) return; // 철 지난 명령은 무시
+
     let updates = {};
 
     if (command === 'start_turn') {
@@ -643,7 +776,10 @@ window.liarHostAction = async function(command) {
             
             if (accusedId === data.liarId) {
                 updates.liarState = 'liar_guess';
-                updates.msg = `<b>${window.players[accusedId].name}</b>님이 소수파/라이어로 검거되었습니다!<br>마지막으로 다수파의 단어를 맞출 기회를 드립니다.`;
+                updates.liarGuess = null;
+                updates.liarGuessDraft = null;
+                updates.guessVotes = null;
+                updates.msg = `<b>${window.players[accusedId].name}</b>님이 라이어로 검거되었습니다!<br>마지막으로 시민팀의 제시어를 맞출 기회를 드립니다.`;
                 
                 if (window.players[data.liarId].isBot) {
                     // Bot Guess Logic
@@ -680,6 +816,12 @@ window.liarHostAction = async function(command) {
             }
         }
     }
+    else if (command === 'judge_guess') {
+        const liarId2 = data.liarId;
+        const judges2 = Object.keys(window.players).filter(id => id !== liarId2);
+        finalizeGuessJudging(data, data.guessVotes || {}, judges2.length);
+        return; // finalize 가 직접 쓴다
+    }
     else if (command === 'timeout_guess') {
         updates.liarState = 'game_over';
         updates.winners = 'citizen';
@@ -689,6 +831,8 @@ window.liarHostAction = async function(command) {
     else if (command === 'reset') {
         window._judgingGuess = null;
         updates.liarGuess = null;
+        updates.liarGuessDraft = null;
+        updates.guessVotes = null;
         updates.liarState = null;
         updates.votes = null;
         updates.winners = null;
