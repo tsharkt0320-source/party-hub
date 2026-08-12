@@ -184,6 +184,72 @@ navBacks.forEach(btn => btn.addEventListener('click', () => {
     history.replaceState(null, null, location.origin + location.pathname);
 }));
 
+// ===== 홈 화면 앱(PWA) =====
+// 서비스 워커는 캐시를 하지 않는다. 설치 가능 조건을 만족시키는 용도일 뿐이다.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => { /* http 등에서는 무시 */ });
+    });
+}
+
+function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+}
+
+let deferredInstall = null;
+
+// 안드로이드 · 크롬: 설치 가능해지면 이 이벤트가 온다
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    const box = document.getElementById('install-box');
+    if (box && !isStandalone()) box.style.display = 'block';
+});
+
+window.addEventListener('appinstalled', () => {
+    const box = document.getElementById('install-box');
+    if (box) box.style.display = 'none';
+    deferredInstall = null;
+});
+
+// 아이폰 사파리는 위 이벤트가 없어서 직접 안내해야 한다
+function setupInstallUi() {
+    const box = document.getElementById('install-box');
+    const btn = document.getElementById('btn-install');
+    const hint = document.getElementById('install-hint');
+    if (!box || !btn || !hint) return;
+    if (isStandalone()) return; // 이미 앱으로 실행 중
+
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+
+    if (isIOS) {
+        box.style.display = 'block';
+        btn.onclick = () => {
+            hint.innerHTML = '아이폰에서는 아래 순서로 추가합니다.<br><br>' +
+                             '1. 사파리 아래쪽 <b>공유 버튼</b>(⬆️) 누르기<br>' +
+                             '2. 목록에서 <b>홈 화면에 추가</b> 선택<br>' +
+                             '3. 오른쪽 위 <b>추가</b> 누르기';
+            hint.style.display = 'block';
+        };
+        return;
+    }
+
+    btn.onclick = async () => {
+        if (!deferredInstall) {
+            hint.innerHTML = '브라우저 메뉴(⋮)에서 <b>앱 설치</b> 또는 ' +
+                             '<b>홈 화면에 추가</b>를 선택해 주세요.';
+            hint.style.display = 'block';
+            return;
+        }
+        deferredInstall.prompt();
+        try { await deferredInstall.userChoice; } catch (e) {}
+        deferredInstall = null;
+    };
+}
+setupInstallUi();
+
 // ===== 세션 기억 (폰이 꺼지거나 새로고침돼도 같은 사람으로 복귀) =====
 // playerId를 그대로 되살려야 미사일 기록 · 퀴즈 점수 · 팀 배정이 다시 본인에게 붙는다.
 const SESSION_KEY = 'partyhub_session';

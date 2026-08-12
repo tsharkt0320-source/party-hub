@@ -4,7 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="referrer" content="no-referrer">
-    <title>Party Hub</title>
+    <title>파티 허브</title>
+
+    <!-- 홈 화면 앱(PWA) 설정 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1e293b">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="파티 허브">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="icon" href="/icons/icon-192.png">
+
     <link rel="stylesheet" href="style.css">
     
     <!-- Firebase SDKs -->
@@ -79,7 +90,15 @@
                 <button id="nav-create" class="btn primary" style="padding: 20px; font-size: 1.2rem;">방 만들기</button>
                 <button id="nav-join" class="btn secondary" style="padding: 20px; font-size: 1.2rem;">방 접속하기</button>
             </div>
-            <p style="margin-top:30px; font-size:0.75rem; color:#475569;">ver 1.4</p>
+            <!-- 홈 화면 앱으로 추가 안내 (설치 가능할 때만 표시) -->
+            <div id="install-box" style="display:none; margin-top:22px;">
+                <button id="btn-install" class="btn" style="width:100%; padding:13px; font-size:0.95rem; background:rgba(99,102,241,0.15); border:1px solid var(--primary); color:#c7d2fe;">
+                    📲 홈 화면에 앱으로 추가
+                </button>
+                <p id="install-hint" style="display:none; margin-top:10px; font-size:0.82rem; color:#94a3b8; line-height:1.6; text-align:left; padding:12px; background:rgba(255,255,255,0.04); border-radius:10px;"></p>
+            </div>
+
+            <p style="margin-top:26px; font-size:0.75rem; color:#475569;">ver 1.5</p>
         </div>
 
         <!-- 방 만들기 화면 -->

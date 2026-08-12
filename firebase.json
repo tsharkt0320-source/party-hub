@@ -12,7 +12,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(html|js|css)",
+        "source": "**/*.@(html|js|css|json|webmanifest)",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache" }
         ]
