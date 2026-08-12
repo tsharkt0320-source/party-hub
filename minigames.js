@@ -1,5 +1,16 @@
 // minigames.js
 
+// 돌리기/굴리기를 다시 시작하면 이전 예약이 뒤늦게 결과를 덮어쓰는 것을 막는다.
+// (마피아 사냥꾼 · 라이어 투표 · 퀴즈 제한시간에서 같은 문제가 있었다)
+window._miniRound = 0;
+
+function newMiniRound() {
+    window._miniRound = (window._miniRound || 0) + 1;
+    if (window._miniTimer) { clearTimeout(window._miniTimer); window._miniTimer = null; }
+    return window._miniRound;
+}
+window.newMiniRound = newMiniRound;
+
 window.updateMinigames = function(data) {
     const content = document.getElementById('minigames-content');
     if (!content) return;
@@ -75,6 +86,7 @@ function syncDiceFlicker(data) {
 
 window.startMinigame = function(type) {
     if (!window.isHost) return;
+    newMiniRound(); // 다른 게임으로 넘어가면 이전 예약은 버린다
     const pKeys = Object.keys(window.players);
     let initialData = {
         minigameState: type,
@@ -434,6 +446,7 @@ function renderRoulette(data) {
 
 window.spinRoulette = function() {
     if (!window.isHost) return;
+    const round = newMiniRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     
     window.firebaseGet(roomRef).then(snapshot => {
@@ -462,7 +475,8 @@ window.spinRoulette = function() {
         });
 
         // 4초 후 결과 발표
-        setTimeout(() => {
+        window._miniTimer = setTimeout(() => {
+            if (window._miniRound !== round) return; // 이미 다시 돌렸으면 무시
             window.firebaseUpdate(roomRef, {
                 isSpinning: false,
                 phase: 'result',
@@ -572,6 +586,7 @@ window.updateDiceCount = function(cnt) {
 
 window.rollDice = function() {
     if (!window.isHost) return;
+    const round = newMiniRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     
     window.firebaseUpdate(roomRef, {
@@ -580,7 +595,8 @@ window.rollDice = function() {
         diceResults: null
     });
     
-    setTimeout(() => {
+    window._miniTimer = setTimeout(() => {
+        if (window._miniRound !== round) return; // 이미 다시 굴렸으면 무시
         window.firebaseGet(roomRef).then(snapshot => {
             const data = snapshot.val();
             const dCount = data.diceCount || 1;
@@ -666,6 +682,7 @@ function renderArrow(data) {
 
 window.spinArrow = function() {
     if (!window.isHost) return;
+    const round = newMiniRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     
     window.firebaseGet(roomRef).then(snapshot => {
@@ -687,7 +704,8 @@ window.spinArrow = function() {
             winner: null
         });
 
-        setTimeout(() => {
+        window._miniTimer = setTimeout(() => {
+            if (window._miniRound !== round) return; // 이미 다시 돌렸으면 무시
             window.firebaseUpdate(roomRef, {
                 isSpinning: false,
                 phase: 'result',
@@ -767,6 +785,7 @@ window.updateDrawCount = function(delta) {
 
 window.startDraw = function() {
     if (!window.isHost) return;
+    const round = newMiniRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     
     window.firebaseUpdate(roomRef, {
@@ -775,7 +794,8 @@ window.startDraw = function() {
         winners: null
     });
     
-    setTimeout(() => {
+    window._miniTimer = setTimeout(() => {
+        if (window._miniRound !== round) return; // 이미 다시 뽑았으면 무시
         window.firebaseGet(roomRef).then(snapshot => {
             const data = snapshot.val();
             const dCount = data.drawCount || 1;
