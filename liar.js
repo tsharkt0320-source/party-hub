@@ -47,6 +47,7 @@ function hostRevealLiar(data) {
 window.updateLiar = function(data) {
     mergeLiarSecret(data);
     hostRevealLiar(data);
+    hostJudgeLiarGuess(data);
     const content = document.getElementById('liar-content');
     
     // 1. 대기실
@@ -375,14 +376,22 @@ window.updateLiar = function(data) {
                 <div class="card" style="border:2px solid var(--danger);">
                     <h3 style="color:var(--danger); margin-bottom:15px;">🚨 정체가 탄로 났거나, 동료(스파이)가 죽었습니다!</h3>
                     <p style="margin-bottom:15px;">마지막 기회입니다. 다수파의 진짜 제시어는 무엇일까요?</p>
-                    <div style="display:flex; flex-direction:column; gap:10px;">
-                        <input type="text" id="liar-guess-input" placeholder="정답 입력..." style="padding:15px; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1.2rem; text-align:center;">
-                        <button class="btn primary" onclick="submitLiarGuess()" style="padding:15px; font-size:1.1rem;">정답 외치기!</button>
-                    </div>
+                    ${data.liarGuess
+                        ? `<div style="padding:14px; border-radius:10px; background:rgba(251,191,36,0.12); border:1px solid #fbbf24;">
+                               <div style="color:#fbbf24; font-size:0.85rem; margin-bottom:6px;">외친 정답</div>
+                               <div style="font-size:1.4rem; font-weight:900;">${(window.escapeHtml||(x=>x))(data.liarGuess)}</div>
+                               <div style="color:#94a3b8; font-size:0.85rem; margin-top:8px;">결과를 기다리는 중...</div>
+                           </div>`
+                        : `<div style="display:flex; flex-direction:column; gap:10px;">
+                               <input type="text" id="liar-guess-input" placeholder="정답 입력..." style="padding:15px; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1.2rem; text-align:center;" onkeypress="if(event.key==='Enter') window.submitLiarGuess()">
+                               <button id="liar-guess-btn" class="btn primary" onclick="window.submitLiarGuess()" style="padding:15px; font-size:1.1rem;">정답 외치기!</button>
+                           </div>`}
                 </div>
             `;
         } else {
-            html += `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 다수파의 진짜 정답을 고민하고 있습니다... (방어 실패를 기도하세요!)</div>`;
+            html += data.liarGuess
+                ? `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 <b>[${(window.escapeHtml||(x=>x))(data.liarGuess)}]</b> 라고 외쳤습니다! 판정 중...</div>`
+                : `<div class="card info-text" style="color:var(--warning);">🤡 라이어가 진짜 제시어를 고민하고 있습니다... (틀리기를 기도하세요!)</div>`;
             if (window.isHost) {
                 html += `<button class="btn danger" style="width:100%; margin-top:15px;" onclick="window.liarHostAction('timeout_guess')">시간 초과 (강제 오답 처리)</button>`;
             }
@@ -529,31 +538,44 @@ window.submitLiarAction = function(actionKey, value) {
 window.submitLiarGuess = function() {
     const input = document.getElementById('liar-guess-input');
     if (!input || !input.value.trim()) return;
-    
-    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
-    
-    window.firebaseGet(roomRef).then(snapshot => {
-        const data = snapshot.val();
-        let guess = input.value.trim().replace(/\s/g, ''); // 띄어쓰기 제거 후 비교
-        let actual = data.word.replace(/\s/g, '');
-        
-        if (guess === actual) {
-            window.firebaseUpdate(roomRef, {
-                liarState: 'game_over',
-                winners: 'liar',
-                guessResult: 'correct',
-                msg: `<b>${window.players[data.liarId].name}</b>(라이어)가 다수파의 단어 <b>[${input.value.trim()}]</b>(을)를 맞혔습니다! 소름! 😱`
-            });
-        } else {
-            window.firebaseUpdate(roomRef, {
-                liarState: 'game_over',
-                winners: 'citizen',
-                guessResult: 'wrong',
-                msg: `<b>${window.players[data.liarId].name}</b>(라이어)가 오답 <b>[${input.value.trim()}]</b>(을)를 외치고 장렬히 전사했습니다! 🤣`
-            });
-        }
+
+    // 라이어 화면에는 진짜 제시어가 없다(방장 전용 secret).
+    // 그래서 정답 여부는 제출만 하고 방장이 판정한다.
+    const btn = document.getElementById('liar-guess-btn');
+    if (btn) { btn.disabled = true; btn.innerText = '제출 중...'; }
+
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        liarGuess: input.value.trim()
     });
 };
+
+// 방장만 진짜 제시어를 볼 수 있으므로, 판정도 방장이 한다.
+function hostJudgeLiarGuess(data) {
+    if (!window.isHost || !window.myRoom) return;
+    if (data.liarState !== 'liar_guess' || !data.liarGuess) return;
+
+    const sec = (window._secret && window._secret.liar) || null;
+    const actualRaw = (sec && sec.word) || data.word;
+    if (!actualRaw) return; // 아직 secret 을 못 받았으면 다음 스냅샷에서 다시 시도
+
+    if (window._judgingGuess === data.liarGuess) return; // 중복 판정 방지
+    window._judgingGuess = data.liarGuess;
+
+    const norm = (v) => String(v).replace(/\s/g, '').toLowerCase();
+    const correct = norm(data.liarGuess) === norm(actualRaw);
+    const liarName = (window.players[(sec && sec.liarId) || data.liarId] || {}).name || '라이어';
+    const esc = window.escapeHtml || (x => x);
+
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        liarState: 'game_over',
+        winners: correct ? 'liar' : 'citizen',
+        guessResult: correct ? 'correct' : 'wrong',
+        liarGuess: null,
+        msg: correct
+            ? `<b>${esc(liarName)}</b>가 정답 <b>[${esc(data.liarGuess)}]</b>(을)를 맞혔습니다! 소름! 😱`
+            : `<b>${esc(liarName)}</b>가 오답 <b>[${esc(data.liarGuess)}]</b>(을)를 외치고 장렬히 전사했습니다! 🤣`
+    });
+}
 
 // Host Action
 window.liarHostAction = async function(command) {
@@ -665,6 +687,8 @@ window.liarHostAction = async function(command) {
         updates.msg = `시간이 초과되어 라이어 팀이 졌습니다. 시민 승리! 👮`;
     }
     else if (command === 'reset') {
+        window._judgingGuess = null;
+        updates.liarGuess = null;
         updates.liarState = null;
         updates.votes = null;
         updates.winners = null;
