@@ -144,7 +144,12 @@ window.QUIZ_DB = {
             {q: '이 캐릭터는 누구일까요?', a: '미키마우스', img: 'images/mickey.png'},
             {q: '이 캐릭터는 누구일까요?', a: '도널드 덕', img: 'images/donald.png'},
             {q: '이 캐릭터는 누구일까요?', a: '엘사', img: 'images/elsa.png'},
-            {q: '이 캐릭터는 누구일까요?', a: '차오즈', img: 'images/chaozu.png'}
+            {q: '이 캐릭터는 누구일까요?', a: '차오즈', img: 'images/chaozu.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '삼장법사', img: 'images/samjang.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '홍두깨', img: 'images/hongduggae.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '포로리', img: 'images/porori.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '너부리', img: 'images/neoburi.png'},
+            {q: '이 그룹은 누구일까요?', a: '데몬헌터스', img: 'images/demonhunters.png'}
         ],
         '랜덤': []
     },
