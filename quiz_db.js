@@ -135,7 +135,12 @@ window.QUIZ_DB = {
             {q: '이 사람은 누구일까요?', a: '김민재', img: 'images/kimminjae.png'},
             {q: '이 사람은 누구일까요?', a: '도널드 트럼프', img: 'images/donaldtrump.png'},
             {q: '이 그룹은 누구일까요?', a: '블랙핑크', img: 'images/blackpink.png'},
-            {q: '이 사람은 누구일까요?', a: '톰 크루즈', img: 'images/tomcruise.png'}
+            {q: '이 사람은 누구일까요?', a: '톰 크루즈', img: 'images/tomcruise.png'},
+            {q: '이 사람은 누구일까요?', a: '레오나르도 디카프리오', img: 'images/dicaprio.png'},
+            {q: '이 사람은 누구일까요?', a: '로버트 다우니 주니어', img: 'images/rdj.png'},
+            {q: '이 사람은 누구일까요?', a: '일론 머스크', img: 'images/elonmusk.png'},
+            {q: '이 사람은 누구일까요?', a: '이재명', img: 'images/leejaemyung.png'},
+            {q: '이 사람은 누구일까요?', a: '송은이', img: 'images/songeuni.png'}
         ],
         '캐릭터 (사진)': [
             {q: '이 캐릭터는 누구일까요?', a: '버터플', img: 'images/butterfree.png'},
