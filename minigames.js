@@ -11,6 +11,63 @@ function newMiniRound() {
 }
 window.newMiniRound = newMiniRound;
 
+function mgEsc(s) {
+    return (window.escapeHtml ? window.escapeHtml(s) : String(s == null ? '' : s));
+}
+
+// 항목 칸에 글씨를 치는 동안에도 다른 사람 소식이 오면 화면이 통째로 다시 그려진다.
+// 그때 방금 친 글씨가 사라지지 않도록, 저장되기 전 값을 여기에 들고 있는다.
+window._mgDraft = {};
+const mgDraftTimer = {};
+
+window.mgItemInput = function(idx, val) {
+    if (!window.isHost) return;
+    window._mgDraft[idx] = val;
+    clearTimeout(mgDraftTimer[idx]);
+    mgDraftTimer[idx] = setTimeout(() => {
+        window.updateMinigameItem(null, idx, val);
+    }, 350);
+};
+
+// 화면에 보여줄 값 — 아직 저장 전이면 방금 친 글씨를 그대로 보여준다
+function mgItemValue(items, idx) {
+    const saved = items[idx] == null ? '' : items[idx];
+    const draft = window._mgDraft[idx];
+    if (draft === undefined) return saved;
+    if (draft === saved) { delete window._mgDraft[idx]; return saved; }
+    return draft;
+}
+
+// 항목 칸 하나를 그린다 (사다리·제비·원판·화살표가 같이 쓴다)
+function mgItemInputHtml(items, idx, opts) {
+    opts = opts || {};
+    return '<div style="display:flex; gap:6px; align-items:center;">' +
+               (opts.label ? '<span style="color:#64748b; font-size:0.8rem; min-width:2.6em;">' + opts.label + '</span>' : '') +
+               '<input type="text" class="input-group input mg-item-input" data-mg-idx="' + idx + '"' +
+                   ' value="' + mgEsc(mgItemValue(items, idx)) + '" style="flex:1; padding:9px; font-size:1rem;"' +
+                   (window.isHost ? '' : ' disabled') +
+                   ' oninput="window.mgItemInput(' + idx + ', this.value)">' +
+               (window.isHost && opts.removable
+                   ? '<button class="btn danger" style="width:auto; padding:9px 12px;" onclick="window.removeMinigameItem(null, ' + idx + ')">X</button>'
+                   : '') +
+           '</div>';
+}
+
+// 다시 그리기 전후로 커서 위치를 기억했다가 되돌려 놓는다
+function mgSaveFocus() {
+    const el = document.activeElement;
+    if (!el || !el.classList || !el.classList.contains('mg-item-input')) return null;
+    return { idx: el.getAttribute('data-mg-idx'), start: el.selectionStart, end: el.selectionEnd };
+}
+
+function mgRestoreFocus(f) {
+    if (!f) return;
+    const el = document.querySelector('.mg-item-input[data-mg-idx="' + f.idx + '"]');
+    if (!el) return;
+    el.focus();
+    try { el.setSelectionRange(f.start, f.end); } catch (e) { /* 무시 */ }
+}
+
 window.updateMinigames = function(data) {
     const content = document.getElementById('minigames-content');
     if (!content) return;
@@ -52,7 +109,9 @@ window.updateMinigames = function(data) {
         backBtn = `<button class="btn danger" style="width:100%; margin-top:20px;" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { minigameState: 'menu' })">미니게임 메뉴로 돌아가기</button>`;
     }
 
+    const focus = mgSaveFocus();
     content.innerHTML = gameHtml + backBtn;
+    mgRestoreFocus(focus);
     syncDiceFlicker(data);
 };
 
@@ -84,6 +143,9 @@ window.startMinigame = function(type) {
         initialData.items = Array(pKeys.length).fill('').map((_, i) => i === 0 ? '당첨' : '꽝');
     } else if (type === 'lots' || type === 'arrow') {
         initialData.items = pKeys.map(id => window.players[id].name);
+        initialData.isShuffling = null;
+        initialData.shuffledItems = null;
+        initialData.revealed = null;
     } else if (type === 'roulette') {
         initialData.items = pKeys.map(id => window.players[id].name);
     } else if (type === 'dice') {
@@ -130,7 +192,7 @@ function renderLadder(data) {
         data.items.forEach((item, idx) => {
             html += `<div style="display:flex; gap:5px;">
                         <span style="padding:8px; background:#1e293b; border-radius:6px; min-width:80px;">${window.players[pKeys[idx]]?.name || '참가자'}</span>
-                        <input type="text" class="input-group input" value="${item}" style="flex:1; padding:8px;" ${!window.isHost ? 'disabled' : ''} onchange="window.updateMinigameItem('ladder', ${idx}, this.value)">
+                        ${mgItemInputHtml(data.items, idx, { label: (idx + 1) + '번' })}
                      </div>`;
         });
         html += `</div>`;
@@ -284,13 +346,10 @@ function renderLots(data) {
                     <h3 style="color:#10b981; margin-bottom:15px;">🎫 제비뽑기</h3>`;
                     
     if (data.phase === 'setup') {
-        html += `<p style="margin-bottom:10px; color:#cbd5e1;">제비의 내용을 설정하세요.</p>
-                 <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;">`;
+        html += `<p style="margin-bottom:12px; color:#cbd5e1; font-size:0.9rem;">제비의 내용을 설정하세요. <span style="color:#64748b;">(${data.items.length}장)</span></p>
+                 <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:15px;">`;
         data.items.forEach((item, idx) => {
-            html += `<div style="display:flex; gap:5px;">
-                        <input type="text" class="input-group input" value="${item}" style="flex:1; padding:8px;" ${!window.isHost ? 'disabled' : ''} onchange="window.updateMinigameItem('lots', ${idx}, this.value)">
-                        ${window.isHost ? `<button class="btn danger" style="padding:8px;" onclick="window.removeMinigameItem('lots', ${idx})">X</button>` : ''}
-                     </div>`;
+            html += mgItemInputHtml(data.items, idx, { label: (idx + 1) + '번', removable: true });
         });
         html += `</div>`;
         if (window.isHost) {
@@ -300,25 +359,32 @@ function renderLots(data) {
                      </div>`;
         }
     } else {
-        html += `<div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:20px;">`;
+        const shuffling = !!data.isShuffling;
+        const revealedCount = data.revealed ? Object.keys(data.revealed).length : 0;
+        // 섞기가 막 끝난 순간에만 한 번 튕겨준다 (한 장이라도 열면 더는 튕기지 않는다)
+        const justSettled = !shuffling && revealedCount === 0;
+
+        html += `<p style="color:${shuffling ? '#fbbf24' : '#94a3b8'}; font-size:0.9rem; margin-bottom:14px; height:1.3em;">
+                    ${shuffling ? '🎫 제비를 섞는 중...' : '카드를 눌러 확인하세요'}
+                 </p>`;
+
+        html += `<div class="lots-board${shuffling ? ' shuffling' : ''}${justSettled ? ' settled' : ''}">`;
         data.shuffledItems.forEach((item, idx) => {
-            const isRevealed = data.revealed && data.revealed[idx];
-            
-            html += `<div style="width:80px; height:100px; perspective:1000px; cursor:pointer;" onclick="window.revealLot(${idx})">
-                        <div style="width:100%; height:100%; position:relative; transition: transform 0.6s; transform-style: preserve-3d; transform: ${isRevealed ? 'rotateY(180deg)' : 'rotateY(0deg)'};">
-                            <div style="position:absolute; width:100%; height:100%; backface-visibility:hidden; background:#3b82f6; border-radius:8px; display:flex; align-items:center; justify-content:center; color:white; font-size:2rem; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
-                                ?
-                            </div>
-                            <div style="position:absolute; width:100%; height:100%; backface-visibility:hidden; background:white; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#1e293b; font-size:1.2rem; font-weight:bold; transform: rotateY(180deg); box-shadow:0 4px 6px rgba(0,0,0,0.3); padding:5px; text-align:center; word-break:keep-all;">
-                                ${item}
-                            </div>
+            const isRevealed = !shuffling && data.revealed && data.revealed[idx];
+            html += `<div class="lot-card" style="animation-delay:${(idx % 6) * 0.07}s;" ${shuffling ? '' : `onclick="window.revealLot(${idx})"`}>
+                        <div class="lot-inner" style="transform: ${isRevealed ? 'rotateY(180deg)' : 'rotateY(0deg)'};">
+                            <div class="lot-face lot-back">?</div>
+                            <div class="lot-face lot-front">${mgEsc(item)}</div>
                         </div>
                      </div>`;
         });
         html += `</div>`;
-        
-        if (window.isHost) {
-            html += `<button class="btn secondary" style="width:100%; margin-top:10px;" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'setup', revealed: null, shuffledItems: null })">다시 설정하기</button>`;
+
+        if (window.isHost && !shuffling) {
+            html += `<div class="btn-row" style="margin-top:14px;">
+                        <button class="btn primary wide" onclick="window.startLotsGame()">🔀 다시 섞기</button>
+                        <button class="btn secondary" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'setup', revealed: null, shuffledItems: null, isShuffling: null })">내용 수정</button>
+                     </div>`;
         }
     }
     
@@ -326,22 +392,38 @@ function renderLots(data) {
     return html;
 }
 
+const LOTS_SHUFFLE_MS = 1800;
+
 window.startLotsGame = function() {
     if (!window.isHost) return;
+    const round = newMiniRound();
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     window.firebaseGet(roomRef).then(snapshot => {
         const data = snapshot.val();
-        let shuffled = [...data.items].sort(() => Math.random() - 0.5);
+        // 제대로 된 섞기 (sort(() => Math.random() - 0.5) 는 자리마다 확률이 다르다)
+        const shuffled = [...data.items];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+        }
         window.firebaseUpdate(roomRef, {
             phase: 'playing',
             shuffledItems: shuffled,
-            revealed: {}
+            revealed: {},
+            isShuffling: true
         });
+
+        // 섞이는 모습을 보여준 뒤 뽑을 수 있게 연다
+        window._miniTimer = setTimeout(() => {
+            if (window._miniRound !== round) return; // 그 사이 다시 섞었으면 무시
+            window.firebaseUpdate(roomRef, { isShuffling: false });
+        }, LOTS_SHUFFLE_MS);
     });
 };
 
 window.revealLot = function(idx) {
     if (!window.myRoom) return;
+    if (window._lastRoomData && window._lastRoomData.isShuffling) return; // 섞는 중에는 못 연다
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     window.firebaseUpdate(window.firebaseChild(roomRef, 'revealed'), {
         [idx]: true
@@ -358,8 +440,7 @@ function renderRoulette(data) {
                  <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;" id="roulette-items">`;
         data.items.forEach((item, idx) => {
             html += `<div style="display:flex; gap:5px;">
-                        <input type="text" class="input-group input roulette-item-input" value="${item}" data-idx="${idx}" style="flex:1; padding:8px;" ${!window.isHost ? 'disabled' : ''} onchange="window.updateMinigameItem('roulette', ${idx}, this.value)">
-                        ${window.isHost ? `<button class="btn danger" style="padding:8px;" onclick="window.removeMinigameItem('roulette', ${idx})">X</button>` : ''}
+                        ${mgItemInputHtml(data.items, idx, { label: (idx + 1) + '칸', removable: true })}
                      </div>`;
         });
         html += `</div>`;
@@ -603,8 +684,7 @@ function renderArrow(data) {
                  <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;">`;
         data.items.forEach((item, idx) => {
             html += `<div style="display:flex; gap:5px;">
-                        <input type="text" class="input-group input" value="${item}" style="flex:1; padding:8px;" ${!window.isHost ? 'disabled' : ''} onchange="window.updateMinigameItem('arrow', ${idx}, this.value)">
-                        ${window.isHost ? `<button class="btn danger" style="padding:8px;" onclick="window.removeMinigameItem('arrow', ${idx})">X</button>` : ''}
+                        ${mgItemInputHtml(data.items, idx, { label: (idx + 1) + '번', removable: true })}
                      </div>`;
         });
         html += `</div>`;

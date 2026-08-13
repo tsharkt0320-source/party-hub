@@ -121,7 +121,8 @@ window.QUIZ_DB = {
             {q: '이 사람은 누구일까요?', a: '문희준', img: 'images/moonheejun.jpg'},
             {q: '이 사람은 누구일까요?', a: '원빈', img: 'images/wonbin.jpg'},
             {q: '이 사람은 누구일까요?', a: '전지현', img: 'images/jeonjihyun.jpg'},
-            {q: '이 사람은 누구일까요?', a: '이병헌', img: 'images/leebyunghun.png'}
+            {q: '이 사람은 누구일까요?', a: '이병헌', img: 'images/leebyunghun.png'},
+            {q: '이 사람은 누구일까요?', a: '이강인', img: 'images/leekangin.png'}
         ],
         '랜덤': []
     },

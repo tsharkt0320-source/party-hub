@@ -479,8 +479,10 @@ function unstickRoom(data) {
     if (data.isSpinning) fix.isSpinning = false;
     if (data.isRolling) fix.isRolling = false;
     if (data.isDrawing) fix.isDrawing = false;
+    if (data.isShuffling) fix.isShuffling = false;
     if (data.isCountingDown) { fix.isCountingDown = null; fix.countdownMsg = null; }
     if (data.buzzer_countdown) { fix.buzzer_countdown = 0; fix.buzzer_active = true; }
+    if (data.bz_countdown) { fix.bz_countdown = 0; fix.bz_active = true; }
     if (data.words4_timer) fix.words4_timer = 0;
     if (Object.keys(fix).length === 0) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), fix);
