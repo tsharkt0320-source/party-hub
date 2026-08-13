@@ -21,7 +21,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, remove, get, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, update, remove, get, child, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
         // 사용자 Firebase 설정
@@ -49,6 +49,8 @@
             window.firebaseGet = get;
             window.firebaseChild = child;
             window.firebaseOnDisconnect = onDisconnect;
+            // 선착순 자리 선점에 쓴다 — 두 명이 동시에 눌러도 서버에서 한 명만 성공한다
+            window.firebaseRunTransaction = runTransaction;
 
             // 익명 로그인 — 사용자는 아무것도 하지 않는다.
             // 페이지를 실제로 연 기기에만 출입증이 발급되므로,
@@ -158,7 +160,7 @@
                 <div class="game-selector">
                     <button class="btn game-btn" data-game="mafia">🕵️ 마피아 게임</button>
                     <button class="btn game-btn" data-game="liar">🤥 라이어 게임</button>
-                    <button class="btn game-btn" data-game="quiz">🎉 파티 퀴즈 모음집</button>
+                    <button class="btn game-btn" data-game="quiz">🎉 단체 게임 모음집</button>
                     <button class="btn game-btn" data-game="minigames">🎲 복불복 미니게임</button>
                     <button class="btn game-btn" data-game="record">🏆 기록 게임</button>
                     <button class="btn game-btn" data-game="buzzer">🚨 부저만 사용</button>
@@ -207,7 +209,7 @@
         <!-- 초성 퀴즈 화면 -->
         <div id="screen-quiz" class="screen">
             <button class="btn-float-back back-to-lobby host-only">◁</button>
-            <h2>🎉 파티 퀴즈 모음집</h2>
+            <h2>🎉 단체 게임 모음집</h2>
             <div id="quiz-content"></div>
         </div>
         <!-- 복불복 미니게임 화면 -->

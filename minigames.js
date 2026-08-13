@@ -53,6 +53,54 @@ function mgItemInputHtml(items, idx, opts) {
            '</div>';
 }
 
+// 사람마다 색을 하나씩 (제비 주인 표시 · 사다리 경로에 같이 쓴다)
+const MG_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+
+// 짧은 알림 (선점 실패 등)
+window.mgToast = function(msg) {
+    let el = document.getElementById('mg-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'mg-toast';
+        document.body.appendChild(el);
+    }
+    el.innerText = msg;
+    el.classList.remove('show');
+    void el.offsetWidth; // 애니메이션 다시 태우기
+    el.classList.add('show');
+    clearTimeout(window._mgToastTimer);
+    window._mgToastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+};
+
+// 선착순 자리 선점.
+// 두 명이 같은 순간에 눌러도 서버에서 한 번만 성공한다 (먼저 도착한 쪽이 임자).
+function mgClaimSlot(field, idx, onFail) {
+    const owners = (window._lastRoomData || {})[field] || {};
+    if (owners[idx]) { onFail((owners[idx].name || '누군가') + '님이 이미 가져갔습니다'); return; }
+    // 1인 1개
+    const mine = Object.keys(owners).find(k => owners[k] && owners[k].id === window.myPlayerId);
+    if (mine !== undefined) { onFail('이미 하나 고르셨습니다'); return; }
+
+    const me = {
+        id: window.myPlayerId,
+        name: (window.players[window.myPlayerId] || {}).name || '?'
+    };
+    const ref = window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/' + field + '/' + idx);
+
+    if (!window.firebaseRunTransaction) { // 예전 버전을 열어둔 경우 대비
+        window.firebaseUpdate(ref, me);
+        return;
+    }
+    window.firebaseRunTransaction(ref, (cur) => (cur === null ? me : undefined))
+        .then(res => {
+            if (!res.committed) {
+                const who = res.snapshot && res.snapshot.val();
+                onFail(((who && who.name) || '다른 분') + '님이 한발 빨랐습니다');
+            }
+        })
+        .catch(() => onFail('잠시 후 다시 눌러주세요'));
+}
+
 // 다시 그리기 전후로 커서 위치를 기억했다가 되돌려 놓는다
 function mgSaveFocus() {
     const el = document.activeElement;
@@ -141,11 +189,16 @@ window.startMinigame = function(type) {
     // 각 게임별 초기화
     if (type === 'ladder') {
         initialData.items = Array(pKeys.length).fill('').map((_, i) => i === 0 ? '당첨' : '꽝');
+        initialData.hLines = null;
+        initialData.paths = null;
+        initialData.ladderOwners = null;
+        initialData.ladderShown = null;
+        initialData.ladderLast = null;
     } else if (type === 'lots' || type === 'arrow') {
         initialData.items = pKeys.map(id => window.players[id].name);
         initialData.isShuffling = null;
         initialData.shuffledItems = null;
-        initialData.revealed = null;
+        initialData.lotOwners = null;
     } else if (type === 'roulette') {
         initialData.items = pKeys.map(id => window.players[id].name);
     } else if (type === 'dice') {
@@ -179,110 +232,155 @@ function renderSpecificMinigame(data) {
 }
 
 // --- 🪜 사다리타기 (Ladder) ---
+// 화면 폭에 맞춰 늘어나도록 SVG 안의 좌표계를 고정해 두고 width:100% 로 그린다.
+// (예전에는 사람 수만큼 픽셀 폭이 늘어나 가로 스크롤이 생겼다)
+const LADDER_VB_W = 1000;
+const LADDER_VB_H = 640;
+const LADDER_ROWS = 16;      // 가로줄이 놓일 수 있는 층 수 — 많을수록 복잡해진다
+const LADDER_DRAW_MS = 2200;
+
 function renderLadder(data) {
-    let html = `<div class="card" style="text-align:center; overflow-x:auto;">
+    let html = `<div class="card" style="text-align:center;">
                     <h3 style="color:#f59e0b; margin-bottom:15px;">🪜 사다리타기</h3>`;
-                    
-    const pKeys = data.participants || Object.keys(window.players);
-    const numCols = pKeys.length;
-    
+
+    const items = data.items || [];
+    const numCols = items.length;
+
     if (data.phase === 'setup') {
-        html += `<p style="margin-bottom:10px; color:#cbd5e1;">사다리 하단의 결과를 설정하세요.</p>
-                 <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;">`;
-        data.items.forEach((item, idx) => {
-            html += `<div style="display:flex; gap:5px;">
-                        <span style="padding:8px; background:#1e293b; border-radius:6px; min-width:80px;">${window.players[pKeys[idx]]?.name || '참가자'}</span>
-                        ${mgItemInputHtml(data.items, idx, { label: (idx + 1) + '번' })}
-                     </div>`;
+        html += `<p style="margin-bottom:12px; color:#cbd5e1; font-size:0.9rem;">
+                    사다리 <b>아래에 놓일 결과</b>를 먼저 정하세요. <span style="color:#64748b;">(${numCols}칸)</span>
+                 </p>
+                 <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:15px;">`;
+        items.forEach((item, idx) => {
+            html += mgItemInputHtml(data.items, idx, { label: (idx + 1) + '번' });
         });
         html += `</div>`;
         if (window.isHost) {
-            html += `<div style="display:flex; gap:10px; margin-bottom:20px;">
-                        <button class="btn primary" style="width:100%;" onclick="window.startLadder()">사다리 생성!</button>
-                     </div>`;
+            html += `<button class="btn primary" style="width:100%;" onclick="window.startLadder()">🪜 사다리 생성!</button>`;
+        } else {
+            html += `<p style="color:#94a3b8; font-size:0.9rem;">방장이 결과를 정하는 중...</p>`;
         }
-    } else {
-        // SVG Ladder Render
-        const width = Math.max(300, numCols * 80);
-        const height = 300;
-        const colWidth = width / numCols;
-        
-        html += `<div style="position:relative; width:${width}px; height:${height + 100}px; margin:0 auto;">`;
-        
-        // 상단 참가자 이름
-        pKeys.forEach((pId, idx) => {
-            html += `<div style="position:absolute; top:0; left:${(idx + 0.5) * colWidth}px; transform:translateX(-50%); background:#3b82f6; padding:4px 8px; border-radius:4px; color:white; font-size:0.85rem; white-space:nowrap;">
-                        ${window.players[pId]?.name}
-                     </div>`;
-        });
-        
-        // 사다리 SVG
-        html += `<svg width="${width}" height="${height}" style="position:absolute; top:40px; left:0; background:rgba(255,255,255,0.02); border-radius:8px;">`;
-        
-        // 세로줄
-        for(let i=0; i<numCols; i++) {
-            const x = (i + 0.5) * colWidth;
-            html += `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#475569" stroke-width="4" />`;
-        }
-        
-        // 가로줄
-        if (data.hLines) {
-            const rowHeight = height / 10;
-            data.hLines.forEach(line => {
-                const x1 = (line.col + 0.5) * colWidth;
-                const x2 = (line.col + 1.5) * colWidth;
-                const y = line.row * rowHeight;
-                html += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#475569" stroke-width="4" />`;
-            });
-        }
-        
-        // 결과 경로 (결과 공개 시)
-        if (data.phase === 'result' && data.paths) {
-            const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-            data.paths.forEach((path, idx) => {
-                const pts = path.map(pt => [(pt.col + 0.5) * colWidth, pt.row * (height / 10)]);
-                let d = `M ${pts[0][0]} ${pts[0][1]}`;
-                let len = 0;
-                for (let i = 1; i < pts.length; i++) {
-                    d += ` L ${pts[i][0]} ${pts[i][1]}`;
-                    len += Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]);
-                }
-                len = Math.ceil(len) + 12;
-                // 한 명씩 차례로 내려가야 눈으로 따라갈 수 있다
-                // var() 는 SVG dash 속성 보간에서 동작하지 않으므로 값을 그대로 써넣는다
-                html += `<path d="${d}" fill="none" stroke="${colors[idx % colors.length]}"
-                               stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"
-                               style="stroke-dasharray:${len}; stroke-dashoffset:${len}; animation: ladderDraw 2.2s linear ${(idx * 0.45).toFixed(2)}s forwards;" />`;
-            });
-        }
-        
-        html += `</svg>`;
-        
-        // 하단 결과 항목
-        data.items.forEach((item, idx) => {
-            const isWin = String(item).indexOf('당첨') !== -1;
-            const popped = data.phase === 'result';
-            const delay = (data.paths ? data.paths.length * 0.45 : 0) + 2.2;
-            html += `<div class="${popped ? 'ladder-result' : ''}"
-                          style="position:absolute; bottom:0; left: ${(idx + 0.5) * colWidth}px; transform:translateX(-50%);
-                                 background:${isWin ? '#b45309' : '#1e293b'}; border:1px solid ${isWin ? '#f59e0b' : '#475569'};
-                                 padding:4px 8px; border-radius:4px; color:${isWin ? '#fef3c7' : '#cbd5e1'};
-                                 font-size:0.85rem; white-space:nowrap; ${popped ? `animation-delay:${delay.toFixed(2)}s;` : ''}">
-                        ${item}
-                     </div>`;
-        });
-        
-        html += `</div>`; // SVG container end
+        html += `</div>`;
+        return html;
+    }
 
-        if (window.isHost) {
-            if (data.phase === 'playing') {
-                html += `<button class="btn primary" style="width:100%; margin-top:20px;" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'result' })">결과 공개!</button>`;
-            } else if (data.phase === 'result') {
-                html += `<button class="btn secondary" style="width:100%; margin-top:10px;" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'setup', hLines: null, paths: null })">다시 설정하기</button>`;
-            }
+    // ===== 사다리 화면 =====
+    const owners = data.ladderOwners || {};
+    const takenCount = Object.keys(owners).length;
+    const allTaken = takenCount >= numCols;
+    const isResult = data.phase === 'result';
+    const myCol = Object.keys(owners).find(k => owners[k] && owners[k].id === window.myPlayerId);
+    const iHaveSlot = myCol !== undefined;
+    const shown = data.ladderShown || {};
+    const colW = LADDER_VB_W / numCols;
+    const rowH = LADDER_VB_H / LADDER_ROWS;
+
+    // 안내문
+    if (!allTaken) {
+        html += `<p style="color:#fbbf24; font-size:0.9rem; margin-bottom:10px;">
+                    사다리 위쪽 빈칸을 눌러 자리를 잡으세요 <span style="color:#94a3b8;">(${takenCount}/${numCols}명)</span>
+                 </p>`;
+    } else if (!isResult) {
+        html += `<p style="color:#94a3b8; font-size:0.9rem; margin-bottom:10px;">이름을 누르면 그 사람 길만 따라 내려갑니다</p>`;
+    } else {
+        html += `<p style="color:#4ade80; font-size:0.9rem; margin-bottom:10px;">결과 공개!</p>`;
+    }
+
+    html += `<div class="ladder-wrap">`;
+
+    // --- 위쪽: 자리 ---
+    html += `<div class="ladder-row">`;
+    for (let i = 0; i < numCols; i++) {
+        const o = owners[i];
+        const color = MG_COLORS[i % MG_COLORS.length];
+        if (o) {
+            const isMine = o.id === window.myPlayerId;
+            const clickable = allTaken && !isResult;
+            html += `<div class="ladder-cell"><div class="ladder-name${isMine ? ' mine' : ''}${clickable ? ' clickable' : ''}"
+                          style="background:${color};" ${clickable ? `onclick="window.showLadderPath(${i})"` : ''}>
+                        ${mgEsc(o.name)}
+                     </div></div>`;
+        } else {
+            html += `<div class="ladder-cell"><div class="ladder-slot${iHaveSlot ? ' dim' : ''}"
+                          ${iHaveSlot ? '' : `onclick="window.claimLadderSlot(${i})"`}>+</div></div>`;
         }
     }
-    
+    html += `</div>`;
+
+    // --- 사다리 ---
+    html += `<svg class="ladder-svg" viewBox="0 0 ${LADDER_VB_W} ${LADDER_VB_H}" preserveAspectRatio="none">`;
+    for (let i = 0; i < numCols; i++) {
+        const x = (i + 0.5) * colW;
+        html += `<line x1="${x}" y1="0" x2="${x}" y2="${LADDER_VB_H}" stroke="#475569" stroke-width="7" />`;
+    }
+    (data.hLines || []).forEach(line => {
+        const x1 = (line.col + 0.5) * colW;
+        const x2 = (line.col + 1.5) * colW;
+        const y = line.row * rowH;
+        html += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#475569" stroke-width="7" />`;
+    });
+
+    // --- 경로 ---
+    // 결과 공개면 전부 한 번에, 아니면 눌러서 공개된 것만.
+    // 이미 나와 있던 길은 다시 그리지 않는다 (화면이 갱신될 때마다 다시 그려지는 것 방지)
+    (data.paths || []).forEach((path, idx) => {
+        const reveal = isResult || shown[idx];
+        if (!reveal || !owners[idx]) return;
+
+        const pts = path.map(pt => [(pt.col + 0.5) * colW, pt.row * rowH]);
+        let d = `M ${pts[0][0]} ${pts[0][1]}`;
+        let len = 0;
+        for (let i = 1; i < pts.length; i++) {
+            d += ` L ${pts[i][0]} ${pts[i][1]}`;
+            len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        }
+        len = Math.ceil(len) + 12;
+
+        // 방금 누른 것 · 결과 공개는 애니메이션, 이미 나와 있던 길은 그대로 표시
+        const animate = isResult || data.ladderLast === idx;
+        // var() 는 SVG dash 속성 보간에서 동작하지 않으므로 값을 그대로 써넣는다
+        const style = animate
+            ? `stroke-dasharray:${len}; stroke-dashoffset:${len}; animation: ladderDraw ${LADDER_DRAW_MS}ms linear forwards;`
+            : '';
+        html += `<path d="${d}" fill="none" stroke="${MG_COLORS[idx % MG_COLORS.length]}"
+                       stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"
+                       style="${style}" />`;
+    });
+    html += `</svg>`;
+
+    // --- 아래쪽: 결과 ---
+    html += `<div class="ladder-row">`;
+    items.forEach((item, idx) => {
+        const isWin = String(item).indexOf('당첨') !== -1;
+        // 그 칸에 도착한 사람 (경로가 공개된 경우에만)
+        let arrived = null;
+        (data.paths || []).forEach((p, i) => {
+            if ((isResult || shown[i]) && owners[i] && p[p.length - 1].col === idx) arrived = owners[i];
+        });
+        const popped = isResult;
+        html += `<div class="ladder-cell">
+                    <div class="ladder-goal${isWin ? ' win' : ''}${popped ? ' ladder-result' : ''}"
+                         ${popped ? `style="animation-delay:${(LADDER_DRAW_MS / 1000).toFixed(2)}s;"` : ''}>
+                        ${mgEsc(item)}
+                    </div>
+                    <div class="ladder-arrived">${arrived ? mgEsc(arrived.name) : ''}</div>
+                 </div>`;
+    });
+    html += `</div>`;
+    html += `</div>`; // ladder-wrap
+
+    if (window.isHost) {
+        if (!isResult) {
+            html += `<div class="btn-row" style="margin-top:16px;">
+                        <button class="btn primary wide" ${allTaken ? '' : 'disabled style="opacity:0.5;"'}
+                                onclick="window.revealLadderAll()">${allTaken ? '📢 결과 공개!' : '자리가 다 차야 공개됩니다'}</button>
+                        <button class="btn secondary" onclick="window.resetLadder()">처음부터</button>
+                     </div>`;
+        } else {
+            html += `<button class="btn secondary" style="width:100%; margin-top:12px;" onclick="window.resetLadder()">처음부터</button>`;
+        }
+    }
+
     html += `</div>`;
     return html;
 }
@@ -290,53 +388,85 @@ function renderLadder(data) {
 window.startLadder = function() {
     if (!window.isHost) return;
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
-    
+
     window.firebaseGet(roomRef).then(snapshot => {
         const data = snapshot.val();
-        const pKeys = data.participants;
-        const numCols = pKeys.length;
-        
-        // 랜덤 가로줄 생성 (최대 10줄, 인접한 줄 방지)
-        let hLines = [];
-        for(let row=1; row<10; row++) {
-            let col = Math.floor(Math.random() * (numCols - 1));
-            // 이전 가로줄과 겹치지 않게 간단히 조정
-            if (hLines.length > 0 && hLines[hLines.length-1].row === row && hLines[hLines.length-1].col === col) {
-                continue;
-            }
-            // 일정 확률로 그리기
-            if (Math.random() > 0.3) {
-                hLines.push({row: row, col: col});
+        const numCols = (data.items || []).length;
+        if (numCols < 2) { window.mgToast('결과가 2개 이상 필요합니다'); return; }
+
+        // 가로줄 — 층마다 여러 개를 놓되 서로 붙지 않게 (붙으면 길이 꼬인다)
+        const hLines = [];
+        for (let row = 1; row < LADDER_ROWS; row++) {
+            let col = 0;
+            while (col < numCols - 1) {
+                if (Math.random() < 0.45) { hLines.push({ row: row, col: col }); col += 2; }
+                else col += 1;
             }
         }
-        
-        // 결과 추적 경로 미리 계산
-        let paths = [];
-        for (let i=0; i<numCols; i++) {
-            let path = [{row: 0, col: i}];
-            let currentCol = i;
-            
-            for (let row=1; row<=10; row++) {
-                // 현재 행(row)에 가로줄이 있는지 확인
-                let lineAtLeft = hLines.find(l => l.row === row && l.col === currentCol - 1);
-                let lineAtRight = hLines.find(l => l.row === row && l.col === currentCol);
-                
-                if (lineAtLeft || lineAtRight) {
-                    path.push({row: row, col: currentCol}); // 교차로 직전
-                    if (lineAtLeft) currentCol--;
-                    else if (lineAtRight) currentCol++;
-                    path.push({row: row, col: currentCol}); // 이동 후
+
+        // 각 칸에서 출발했을 때 어디로 도착하는지 미리 계산
+        const paths = [];
+        for (let i = 0; i < numCols; i++) {
+            const path = [{ row: 0, col: i }];
+            let cur = i;
+            for (let row = 1; row < LADDER_ROWS; row++) {
+                const left = hLines.find(l => l.row === row && l.col === cur - 1);
+                const right = hLines.find(l => l.row === row && l.col === cur);
+                if (left || right) {
+                    path.push({ row: row, col: cur });
+                    cur = left ? cur - 1 : cur + 1;
+                    path.push({ row: row, col: cur });
                 }
             }
-            path.push({row: 10, col: currentCol}); // 바닥 도착
+            path.push({ row: LADDER_ROWS, col: cur });
             paths.push(path);
         }
-        
+
         window.firebaseUpdate(roomRef, {
             phase: 'playing',
             hLines: hLines,
-            paths: paths
+            paths: paths,
+            ladderOwners: null,
+            ladderShown: null,
+            ladderLast: null
         });
+    });
+};
+
+// 위쪽 자리 선점 (선착순 · 1인 1칸)
+window.claimLadderSlot = function(col) {
+    if (!window.myRoom) return;
+    mgClaimSlot('ladderOwners', col, window.mgToast);
+};
+
+// 이름을 누르면 그 사람 길만 내려간다
+window.showLadderPath = function(col) {
+    const d = window._lastRoomData || {};
+    if (d.phase === 'result') return;
+    if ((d.ladderShown || {})[col]) return; // 이미 나와 있음
+    const owners = d.ladderOwners || {};
+    if (Object.keys(owners).length < (d.items || []).length) return; // 자리가 다 차야
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        ['ladderShown/' + col]: true,
+        ladderLast: col
+    });
+};
+
+window.revealLadderAll = function() {
+    if (!window.isHost) return;
+    const d = window._lastRoomData || {};
+    if (Object.keys(d.ladderOwners || {}).length < (d.items || []).length) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        phase: 'result',
+        ladderLast: null
+    });
+};
+
+window.resetLadder = function() {
+    if (!window.isHost) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        phase: 'setup', hLines: null, paths: null,
+        ladderOwners: null, ladderShown: null, ladderLast: null
     });
 };
 
@@ -360,21 +490,42 @@ function renderLots(data) {
         }
     } else {
         const shuffling = !!data.isShuffling;
-        const revealedCount = data.revealed ? Object.keys(data.revealed).length : 0;
-        // 섞기가 막 끝난 순간에만 한 번 튕겨준다 (한 장이라도 열면 더는 튕기지 않는다)
-        const justSettled = !shuffling && revealedCount === 0;
+        const owners = data.lotOwners || {};
+        const ownedCount = Object.keys(owners).length;
+        // 섞기가 막 끝난 순간에만 한 번 튕겨준다 (한 장이라도 뽑으면 더는 튕기지 않는다)
+        const justSettled = !shuffling && ownedCount === 0;
 
-        html += `<p style="color:${shuffling ? '#fbbf24' : '#94a3b8'}; font-size:0.9rem; margin-bottom:14px; height:1.3em;">
-                    ${shuffling ? '🎫 제비를 섞는 중...' : '카드를 눌러 확인하세요'}
+        const myIdx = Object.keys(owners).find(k => owners[k] && owners[k].id === window.myPlayerId);
+        const iHaveOne = myIdx !== undefined;
+
+        if (iHaveOne) {
+            html += `<div style="margin-bottom:12px; padding:10px; border-radius:10px; background:rgba(16,185,129,0.15); border:1px solid #10b981;">
+                        <span style="color:#6ee7b7; font-size:0.9rem;">내 제비</span>
+                        <div style="color:#fff; font-size:1.3rem; font-weight:900;">${mgEsc(data.shuffledItems[myIdx])}</div>
+                     </div>`;
+        }
+
+        html += `<p style="color:${shuffling ? '#fbbf24' : '#94a3b8'}; font-size:0.9rem; margin-bottom:14px; min-height:1.3em;">
+                    ${shuffling ? '🎫 제비를 섞는 중...'
+                                : (iHaveOne ? `${ownedCount}/${data.shuffledItems.length}장 뽑힘`
+                                            : '카드를 하나 골라 누르세요 (한 사람당 한 장)')}
                  </p>`;
 
         html += `<div class="lots-board${shuffling ? ' shuffling' : ''}${justSettled ? ' settled' : ''}">`;
         data.shuffledItems.forEach((item, idx) => {
-            const isRevealed = !shuffling && data.revealed && data.revealed[idx];
-            html += `<div class="lot-card" style="animation-delay:${(idx % 6) * 0.07}s;" ${shuffling ? '' : `onclick="window.revealLot(${idx})"`}>
-                        <div class="lot-inner" style="transform: ${isRevealed ? 'rotateY(180deg)' : 'rotateY(0deg)'};">
+            const owner = owners[idx];
+            const taken = !shuffling && !!owner;
+            const isMine = taken && owner.id === window.myPlayerId;
+            const dim = !shuffling && !taken && iHaveOne;
+            html += `<div class="lot-card${taken ? ' taken' : ''}${isMine ? ' mine' : ''}${dim ? ' dim' : ''}"
+                          style="animation-delay:${(idx % 6) * 0.07}s;"
+                          ${shuffling || taken || iHaveOne ? '' : `onclick="window.revealLot(${idx})"`}>
+                        <div class="lot-inner" style="transform: ${taken ? 'rotateY(180deg)' : 'rotateY(0deg)'};">
                             <div class="lot-face lot-back">?</div>
-                            <div class="lot-face lot-front">${mgEsc(item)}</div>
+                            <div class="lot-face lot-front">
+                                <span class="lot-item">${mgEsc(item)}</span>
+                                <span class="lot-owner">${taken ? '🧑 ' + mgEsc(owner.name) : ''}</span>
+                            </div>
                         </div>
                      </div>`;
         });
@@ -383,7 +534,7 @@ function renderLots(data) {
         if (window.isHost && !shuffling) {
             html += `<div class="btn-row" style="margin-top:14px;">
                         <button class="btn primary wide" onclick="window.startLotsGame()">🔀 다시 섞기</button>
-                        <button class="btn secondary" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'setup', revealed: null, shuffledItems: null, isShuffling: null })">내용 수정</button>
+                        <button class="btn secondary" onclick="window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { phase: 'setup', lotOwners: null, shuffledItems: null, isShuffling: null })">내용 수정</button>
                      </div>`;
         }
     }
@@ -409,7 +560,7 @@ window.startLotsGame = function() {
         window.firebaseUpdate(roomRef, {
             phase: 'playing',
             shuffledItems: shuffled,
-            revealed: {},
+            lotOwners: null,
             isShuffling: true
         });
 
@@ -424,10 +575,7 @@ window.startLotsGame = function() {
 window.revealLot = function(idx) {
     if (!window.myRoom) return;
     if (window._lastRoomData && window._lastRoomData.isShuffling) return; // 섞는 중에는 못 연다
-    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
-    window.firebaseUpdate(window.firebaseChild(roomRef, 'revealed'), {
-        [idx]: true
-    });
+    mgClaimSlot('lotOwners', idx, window.mgToast);
 };
 
 // --- 🎡 원판돌리기 (Roulette) ---

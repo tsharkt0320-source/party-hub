@@ -419,6 +419,85 @@ body.is-host .guest-only { display: none; }
     font-size: 0.95rem;
 }
 
+/* ===== 알림 (선점 실패 등) ===== */
+#mg-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translate(-50%, 12px);
+    max-width: 88%;
+    padding: 11px 18px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #475569;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    text-align: center;
+    z-index: 10000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+}
+#mg-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== 🪜 사다리타기 ===== */
+/* 화면 폭에 맞춰 늘어난다 — 사람이 많아도 가로 스크롤이 생기지 않는다 */
+.ladder-wrap { width: 100%; }
+
+.ladder-row { display: flex; width: 100%; }
+.ladder-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 2px;
+}
+
+.ladder-slot, .ladder-name, .ladder-goal {
+    border-radius: 6px;
+    padding: 5px 3px;
+    font-size: 0.78rem;
+    font-weight: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.ladder-slot {
+    background: rgba(255,255,255,0.06);
+    border: 1.5px dashed #64748b;
+    color: #94a3b8;
+    cursor: pointer;
+}
+.ladder-slot:active { background: rgba(255,255,255,0.16); }
+.ladder-slot.dim { opacity: 0.35; cursor: default; }
+
+.ladder-name { color: #fff; border: 1.5px solid rgba(255,255,255,0.3); }
+.ladder-name.mine { box-shadow: 0 0 0 2px #fbbf24; }
+.ladder-name.clickable { cursor: pointer; }
+.ladder-name.clickable:active { transform: scale(0.95); }
+
+.ladder-svg {
+    width: 100%;
+    height: 300px;
+    display: block;
+    margin: 4px 0;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+}
+
+.ladder-goal { background: #1e293b; border: 1px solid #475569; color: #cbd5e1; }
+.ladder-goal.win { background: #b45309; border-color: #f59e0b; color: #fef3c7; }
+.ladder-arrived {
+    margin-top: 3px;
+    font-size: 0.7rem;
+    color: #fbbf24;
+    height: 1em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
 /* ===== 🎫 제비뽑기 ===== */
 .lots-board {
     display: flex;
@@ -460,12 +539,29 @@ body.is-host .guest-only { display: none; }
 .lot-front {
     background: #fff;
     color: #1e293b;
-    font-size: 1.15rem;
     transform: rotateY(180deg);
     padding: 5px;
     text-align: center;
     word-break: keep-all;
+    flex-direction: column;
+    gap: 4px;
 }
+.lot-item { font-size: 1.1rem; line-height: 1.2; }
+.lot-owner {
+    font-size: 0.72rem;
+    font-weight: bold;
+    color: #fff;
+    background: #10b981;
+    border-radius: 999px;
+    padding: 2px 8px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lot-card.mine .lot-front { box-shadow: 0 0 0 3px #fbbf24; border-radius: 8px; }
+.lot-card.taken { cursor: default; }
+.lot-card.dim { opacity: 0.45; cursor: default; }
 
 /* 섞이는 모습 — 카드가 서로 자리를 바꾸듯 오간다 */
 .lots-board.shuffling .lot-card:nth-child(odd)  { animation: lotShuffleA 0.6s ease-in-out infinite; }
