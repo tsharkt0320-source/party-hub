@@ -50,6 +50,76 @@ function bzAdjHtml(target) {
            '</div>';
 }
 
+// ===== 아래 두 개는 '단체 게임 모음집'의 부저에서도 같이 쓴다 =====
+
+// 팀 상자 + 그 안의 사람들 + 이름 앞 부저 램프
+// opts: { winner, showScore, showAdjust, activeTeam, describers, note }
+window.bzTeamBoxesHtml = function(data, opts) {
+    opts = opts || {};
+    const winner = opts.winner || null;
+    const describers = opts.describers || {};
+    const teams = data.globalTeams || {};
+    const members = { A: [], B: [] };
+    bzPlayerIds().forEach(id => { members[teams[id] === 'B' ? 'B' : 'A'].push(id); });
+    const t = bzTeamTotals(data);
+
+    const memberHtml = (id) => {
+        const hit = (winner === id);
+        const isDesc = !!describers[id];
+        return '<div class="bz-mem-row' + (hit ? ' hit' : '') + '">' +
+                   '<span class="bz-lamp' + (hit ? ' on' : '') + '"></span>' +
+                   '<span class="bz-nm">' + bzEsc((window.players[id] || {}).name || '?') +
+                       (id === window.myPlayerId ? '<b style="color:#facc15;"> (나)</b>' : '') +
+                   '</span>' +
+                   (isDesc ? '<span class="bz-desc-badge">🎭</span>' : '') +
+               '</div>';
+    };
+
+    const box = (key, name, score, color, bg) => {
+        const dim = opts.activeTeam && opts.activeTeam !== key;
+        return '<div class="bz-team' + (dim ? ' dim' : '') + '"' +
+                   ' style="background:' + bg + '; border:1.5px solid ' + color + ';">' +
+                   '<div class="bz-tname" style="color:' + color + ';">' + bzEsc(name) +
+                       (opts.activeTeam === key ? ' <span style="color:#facc15;">▶</span>' : '') +
+                   '</div>' +
+                   (opts.showScore ? '<div class="bz-tscore" style="color:' + color + ';">' + score + '</div>' : '') +
+                   (opts.showAdjust ? bzAdjHtml(key) : '') +
+                   '<div class="bz-mem">' +
+                       (members[key].length
+                           ? members[key].map(memberHtml).join('')
+                           : '<div class="bz-mem-empty">비어 있음</div>') +
+                   '</div>' +
+               '</div>';
+    };
+
+    return '<div class="bz-teams">' +
+               box('A', data.teamAName || 'A팀', t.a, '#60a5fa', 'rgba(59,130,246,0.16)') +
+               box('B', data.teamBName || 'B팀', t.b, '#f87171', 'rgba(239,68,68,0.16)') +
+           '</div>';
+};
+
+// 부저를 누르는 자리 (카운트다운 → 버튼 → 누른 사람 표시)
+// o: { countdown, winner, active, canPress, note, pressFn }
+window.bzStageHtml = function(o) {
+    if (o.countdown > 0) {
+        return '<div class="bz-stage bz-wait">' +
+                   '<div class="bz-cd">' + o.countdown + '</div>' +
+                   '<div style="color:#94a3b8; font-size:0.85rem;">부저 준비...</div>' +
+               '</div>';
+    }
+    if (o.winner) {
+        return '<div class="bz-stage bz-hit">' +
+                   '<div style="font-size:2rem; line-height:1;">🚨</div>' +
+                   '<div class="bz-wname">' + bzEsc((window.players[o.winner] || {}).name || '누군가') + '</div>' +
+                   '<div style="color:#fde68a; font-size:0.95rem;">눌렀습니다!</div>' +
+               '</div>';
+    }
+    if (o.active && o.canPress) {
+        return '<button class="bz-press" onclick="' + (o.pressFn || 'window.bzPress()') + '">🚨</button>';
+    }
+    return '<button class="bz-press" disabled>' + bzEsc(o.note || '대기 중') + '</button>';
+};
+
 window.updateBuzzer = function(data) {
     const el = document.getElementById('buzzer-content');
     if (!el) return;
@@ -71,38 +141,11 @@ window.updateBuzzer = function(data) {
     }
 
     if (mode === 'team') {
-        // --- 팀 상자 안에 그 팀 사람들을 넣는다 (상자 색으로 소속을 안다) ---
-        const t = bzTeamTotals(data);
-        const teams = data.globalTeams || {};
-        const members = { A: [], B: [] };
-        ids.forEach(id => { members[teams[id] === 'B' ? 'B' : 'A'].push(id); });
-
-        const memberHtml = (id) => {
-            const hit = (winner === id);
-            return '<div class="bz-mem-row' + (hit ? ' hit' : '') + '">' +
-                       '<span class="bz-lamp' + (hit ? ' on' : '') + '"></span>' +
-                       '<span class="bz-nm">' + bzEsc((window.players[id] || {}).name || '?') +
-                           (id === window.myPlayerId ? '<b style="color:#facc15;"> (나)</b>' : '') +
-                       '</span>' +
-                   '</div>';
-        };
-
-        const box = (key, name, score, color, bg) =>
-            '<div class="bz-team" style="background:' + bg + '; border:1.5px solid ' + color + ';">' +
-                '<div class="bz-tname" style="color:' + color + ';">' + bzEsc(name) + '</div>' +
-                '<div class="bz-tscore" style="color:' + color + ';">' + score + '</div>' +
-                (host ? bzAdjHtml(key) : '') +
-                '<div class="bz-mem">' +
-                    (members[key].length
-                        ? members[key].map(memberHtml).join('')
-                        : '<div class="bz-mem-empty">비어 있음</div>') +
-                '</div>' +
-            '</div>';
-
-        html += '<div class="bz-teams">' +
-                box('A', data.teamAName || 'A팀', t.a, '#60a5fa', 'rgba(59,130,246,0.16)') +
-                box('B', data.teamBName || 'B팀', t.b, '#f87171', 'rgba(239,68,68,0.16)') +
-                '</div>';
+        html += window.bzTeamBoxesHtml(data, {
+            winner: winner,
+            showScore: true,
+            showAdjust: host
+        });
     } else {
         // --- 개인 점수 + 부저를 한 줄에 ---
         const scores = data.globalScores || {};
@@ -122,22 +165,13 @@ window.updateBuzzer = function(data) {
     }
 
     // --- 부저 무대 ---
-    if (cd > 0) {
-        html += '<div class="bz-stage bz-wait">' +
-                    '<div class="bz-cd">' + cd + '</div>' +
-                    '<div style="color:#94a3b8; font-size:0.85rem;">부저 준비...</div>' +
-                '</div>';
-    } else if (winner) {
-        html += '<div class="bz-stage bz-hit">' +
-                    '<div style="font-size:2rem; line-height:1;">🚨</div>' +
-                    '<div class="bz-wname">' + bzEsc((window.players[winner] || {}).name || '누군가') + '</div>' +
-                    '<div style="color:#fde68a; font-size:0.95rem;">눌렀습니다!</div>' +
-                '</div>';
-    } else if (active) {
-        html += '<button class="bz-press" onclick="window.bzPress()">🚨</button>';
-    } else {
-        html += '<button class="bz-press" disabled>대기 중</button>';
-    }
+    html += window.bzStageHtml({
+        countdown: cd,
+        winner: winner,
+        active: active,
+        canPress: true,
+        pressFn: 'window.bzPress()'
+    });
 
     // --- 방장 조작 ---
     if (host) {

@@ -165,21 +165,47 @@ window.updateQuiz = function(data) {
                          </div>`;
             }
 
-            // Team setup for charades
+            // 몸으로 말해요 설정
             if (selectedMode === 'charades') {
-                const teams = data.teams || {};
-                const describer = data.describer || null;
-                
-                html += `<div style="margin-bottom:20px; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px;">
-                            <h4 style="color:#fbbf24; margin-bottom:10px;">출제자 선택</h4>`;
-                Object.keys(window.players).forEach(pId => {
-                    let isDesc = (describer === pId);
-                    html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding:5px; border-radius:6px; ${isDesc?'background:rgba(251,191,36,0.2);':''}">
-                                <span>${window.players[pId].name}</span>
-                                <button class="btn ${isDesc?'primary':'secondary'}" style="padding:2px 10px; font-size:0.8rem; ${isDesc?'background:#fbbf24; color:black;':''}" onclick="window.setQuizDescriber('${pId}')">${isDesc?'✓ 출제자':'선택'}</button>
-                             </div>`;
-                });
+                const descMode = data.charDescMode || 'rotate';
+                const scope = data.charAnswerScope || 'team';
+                const gTeams = data.globalTeams || {};
+
+                html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
+                            <h4 style="color:#fbbf24; margin-bottom:8px;">🎭 출제자</h4>
+                            <div class="bz-modes" style="margin-bottom:6px;">
+                                <button class="bz-mode${descMode==='rotate'?' on':''}" onclick="window.setCharOption('charDescMode','rotate')">🔄 한 명씩 돌아가며</button>
+                                <button class="bz-mode${descMode==='fixed'?' on':''}" onclick="window.setCharOption('charDescMode','fixed')">📌 한 명 고정</button>
+                            </div>
+                            <p style="color:#64748b; font-size:0.78rem; line-height:1.5;">
+                                출제자에게만 제시어가 보입니다.
+                                ${descMode==='rotate' ? '문제마다 팀 안에서 다음 사람에게 차례가 넘어갑니다.' : '팀마다 정해진 한 사람이 계속 설명합니다.'}
+                            </p>`;
+
+                if (descMode === 'fixed') {
+                    ['A', 'B'].forEach(tk => {
+                        const memList = Object.keys(window.players).filter(id => (gTeams[id] || 'A') === tk);
+                        const cur = data['charDesc' + tk] || '';
+                        const tName = tk === 'A' ? (data.teamAName || 'A팀') : (data.teamBName || 'B팀');
+                        html += `<label style="margin-top:10px; color:#cbd5e1; font-size:0.85rem;">${tName} 출제자</label>
+                                 <select class="input-group input" style="width:100%; padding:9px; margin-top:4px;" onchange="window.setCharOption('charDesc${tk}', this.value)">
+                                    <option value="">— 선택 —</option>
+                                    ${memList.map(id => `<option value="${id}" ${cur===id?'selected':''}>${window.players[id].name}</option>`).join('')}
+                                 </select>`;
+                    });
+                }
                 html += `</div>`;
+
+                html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
+                            <h4 style="color:#fbbf24; margin-bottom:8px;">🚨 부저를 누를 수 있는 사람</h4>
+                            <div class="bz-modes">
+                                <button class="bz-mode${scope==='team'?' on':''}" onclick="window.setCharOption('charAnswerScope','team')">차례인 팀만</button>
+                                <button class="bz-mode${scope==='all'?' on':''}" onclick="window.setCharOption('charAnswerScope','all')">전원 아무나</button>
+                            </div>
+                            <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
+                                A팀 차례에 나온 카테고리가 B팀 차례에도 그대로 나옵니다. 같은 단어는 나오지 않습니다.
+                            </p>
+                         </div>`;
             }
 
             html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:16px;" onclick="window.startQuizGame()">🚀 문제 출제하기</button>
@@ -212,7 +238,8 @@ window.updateQuiz = function(data) {
         const isWords4 = mode === 'words4';
         const buzzerEnabled = data.buzzer_enabled || false;
         const myTeam = (data.globalTeams && data.globalTeams[window.myPlayerId]) || 'A';
-        const amIDescriber = window.myPlayerId === data.describer;
+        // 출제자는 몸으로 말해요에서만 의미가 있다
+        const amIDescriber = isCharades && window.myPlayerId === data.describer;
         const amICaptain = data.captain === window.myPlayerId;
         const canControl = window.isHost || amICaptain;
 
@@ -258,12 +285,22 @@ window.updateQuiz = function(data) {
                 html += `<h3 style="margin-bottom:15px; line-height:1.5; font-size:1.1rem;">${data.question}</h3>`;
             }
             else if (isCharades) {
+                const turnTeam = data.charTeam || 'A';
+                const tName = turnTeam === 'A' ? (data.teamAName || 'A팀') : (data.teamBName || 'B팀');
+                const tColor = turnTeam === 'A' ? '#60a5fa' : '#f87171';
+                const descName = (window.players[data.describer] || {}).name || '?';
+
+                html += `<div style="margin-bottom:10px; font-size:0.95rem;">
+                            <b style="color:${tColor};">${tName}</b> 차례 ·
+                            🎭 <b style="color:#facc15;">${descName}</b> 님이 설명합니다
+                         </div>`;
+
                 if (amIDescriber) {
-                    html += `<div style="font-size: 1.2rem; margin-bottom:10px; color:#fbbf24;">당신은 출제자입니다! 몸으로 설명하세요!</div>
-                             <div style="font-size: 3rem; font-weight: 900; color: var(--danger); margin: 20px 0;">${data.answer}</div>`;
+                    html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#fbbf24;">몸으로 설명하세요!</div>
+                             <div style="font-size: 2.6rem; font-weight: 900; color: var(--danger); margin: 12px 0;">${data.answer}</div>`;
                 } else {
-                    html += `<div style="font-size: 1.2rem; margin-bottom:10px; color:#22c55e;">화면을 보고 정답을 맞혀보세요!</div>
-                             <div style="font-size: 3rem; font-weight: 900; color: #94a3b8; margin: 20px 0;">???</div>`;
+                    html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#22c55e;">설명을 보고 맞혀보세요!</div>
+                             <div style="font-size: 2.6rem; font-weight: 900; color: #94a3b8; margin: 12px 0;">???</div>`;
                 }
             }
             else if (isWords4) {
@@ -327,40 +364,51 @@ window.updateQuiz = function(data) {
                 }
             }
             else if (buzzerEnabled || isCharades) {
-                // Buzzer mode
-                if (data.buzzer_countdown > 0) {
-                    html += `<div class="card" style="text-align:center;">
-                                <div style="font-size:5rem; font-weight:900; color:#fbbf24; animation: pulse 1s infinite;">${data.buzzer_countdown}</div>
-                                <p style="color:var(--text-muted);">부저 준비...</p>
+                // === 부저 — '부저만 사용'과 같은 화면(팀 상자 + 이름 앞 램프) ===
+                const answerScope = data.charAnswerScope || 'team';
+                const turnTeam = isCharades ? (data.charTeam || 'A') : null;
+
+                // 내가 누를 수 있는지
+                let canPress = true, note = '대기 중';
+                if (amIDescriber) { canPress = false; note = '🎭 출제자는 못 누릅니다'; }
+                else if (isCharades && answerScope === 'team' && myTeam !== turnTeam) {
+                    canPress = false;
+                    note = '상대 팀 차례입니다';
+                } else if (!isCharades && data.buzzer_mode === 'A' && data.last_buzzer_team === myTeam) {
+                    canPress = false;
+                    note = '상대 팀 차례입니다';
+                }
+
+                if (typeof window.bzTeamBoxesHtml === 'function') {
+                    html += window.bzTeamBoxesHtml(data, {
+                        winner: data.buzzer_winner || null,
+                        showScore: false,
+                        showAdjust: false,
+                        activeTeam: (isCharades && answerScope === 'team') ? turnTeam : null,
+                        describers: data.describer ? { [data.describer]: true } : {}
+                    });
+                }
+
+                if (typeof window.bzStageHtml === 'function') {
+                    html += window.bzStageHtml({
+                        countdown: data.buzzer_countdown || 0,
+                        winner: data.buzzer_winner || null,
+                        active: !!data.buzzer_active,
+                        canPress: canPress,
+                        note: note,
+                        pressFn: 'window.pressBuzzer()'
+                    });
+                }
+
+                if (data.buzzer_winner && canControl) {
+                    html += `<div class="btn-row" style="margin-top:12px;">
+                                <button class="btn primary" onclick="window.hostBuzzerCorrect('${data.buzzer_winner}')">⭕ 정답</button>
+                                <button class="btn danger" onclick="window.hostBuzzerWrong()">❌ 오답</button>
                              </div>`;
-                } else if (data.buzzer_winner) {
-                    let bName = window.players[data.buzzer_winner]?.name || '누군가';
-                    html += `<div class="card" style="background:rgba(239,68,68,0.2); border:2px solid var(--danger);">
-                                <h2 style="color:var(--danger); margin-bottom:10px;">🚨 부저가 울렸습니다!</h2>
-                                <p style="font-size:1.5rem; color:white;"><strong>${bName}</strong></p>
-                             </div>`;
-                    if (canControl) {
-                        html += `<div style="display:flex; gap:10px; margin-top:15px;">
-                                    <button class="btn primary" style="flex:1; padding:15px; font-size:1.1rem;" onclick="window.hostBuzzerCorrect('${data.buzzer_winner}')">⭕ 정답</button>
-                                    <button class="btn danger" style="flex:1; padding:15px; font-size:1.1rem;" onclick="window.hostBuzzerWrong()">❌ 오답</button>
-                                 </div>`;
-                    }
-                } else if (amIDescriber) {
-                    html += `<div class="card info-text" style="text-align:center;">출제자는 부저를 누를 수 없습니다.</div>`;
-                } else {
-                    let canPress = true;
-                    if (data.buzzer_mode === 'A' && data.last_buzzer_team) {
-                        if (myTeam === data.last_buzzer_team) canPress = false;
-                    }
-                    if (canPress) {
-                        html += `<button class="btn danger" style="width:100%; height:150px; font-size:3rem; border-radius:20px; box-shadow: 0 10px 0 #991b1b;" onclick="window.pressBuzzer()">🚨 부저!</button>`;
-                    } else {
-                        html += `<div class="card" style="text-align:center; opacity:0.5;"><h3 style="color:var(--text-muted);">상대팀 차례...</h3></div>`;
-                    }
                 }
                 if (canControl && !data.buzzer_winner) {
-                    html += `<div class="btn-row" style="margin-top:15px;">
-                                <button class="btn primary wide" onclick="window.startQuizGame()">▶ 다음 문제</button>
+                    html += `<div class="btn-row" style="margin-top:12px;">
+                                <button class="btn primary wide" onclick="window.startQuizGame()">${isCharades && turnTeam === 'A' ? '▶ 상대 팀 차례' : '▶ 다음 문제'}</button>
                                 <button class="btn secondary" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
@@ -428,6 +476,11 @@ window.setQuizTeam = function(pId, teamId) {
     window.firebaseUpdate(window.firebaseChild(window.firebaseRef(window.db, 'rooms/' + window.myRoom), 'globalTeams'), { [pId]: teamId });
 };
 
+window.setCharOption = function(key, val) {
+    if (!window.isHost) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { [key]: val || null });
+};
+
 window.setQuizDescriber = function(pId) {
     if (!window.isHost) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { describer: pId });
@@ -463,6 +516,29 @@ window.startQuizGame = async function() {
     const buzzerEnabled = data.buzzer_enabled || false;
     const winPoints = data.win_points || 1;
     
+    // === 몸으로 말해요: A팀 → B팀 차례. 같은 카테고리를 두 팀이 나눠 쓴다 ===
+    let charTeam = null, charCat = null;
+    if (mode === 'charades') {
+        const prevTeam = data.charTeam;
+        const wasCharades = data.gameMode === 'charades' && data.quizState === 'playing';
+
+        if (wasCharades && prevTeam === 'A' && data.charCat) {
+            // A팀이 막 끝났다 → 같은 카테고리로 B팀 차례
+            charTeam = 'B';
+            charCat = data.charCat;
+        } else {
+            // 새 라운드 → 카테고리를 새로 뽑고 A팀부터
+            charTeam = 'A';
+            if (cat !== '랜덤' && window.QUIZ_DB.charades[cat]) {
+                charCat = cat; // 방장이 특정 카테고리를 골랐으면 계속 그것으로
+            } else {
+                const real = Object.keys(window.QUIZ_DB.charades).filter(c => c !== '랜덤');
+                charCat = real[Math.floor(Math.random() * real.length)];
+            }
+        }
+        cat = charCat;
+    }
+
     if (!window.QUIZ_DB[mode] || !window.QUIZ_DB[mode][cat]) { cat = '랜덤'; }
     const questions = window.QUIZ_DB[mode][cat];
     if (!questions || questions.length === 0) { alert("문제가 없습니다."); return; }
@@ -488,9 +564,28 @@ window.startQuizGame = async function() {
         }
     }
     
-    let desc = data.describer;
-    if (mode === 'charades' && !desc) desc = window.myPlayerId;
-    
+    // === 출제자 결정 ===
+    // 몸으로 말해요가 아니면 출제자는 없다.
+    // (이걸 비우지 않으면 다른 게임에서도 예전 출제자가 부저를 못 누른다)
+    let desc = null;
+    let charRot = data.charRot || {};
+    if (mode === 'charades') {
+        const gTeams = data.globalTeams || {};
+        const teamMembers = Object.keys(window.players)
+            .filter(id => (gTeams[id] || 'A') === charTeam)
+            .sort((a, b) => ((window.players[a] || {}).joinedAt || 0) - ((window.players[b] || {}).joinedAt || 0));
+
+        if ((data.charDescMode || 'rotate') === 'fixed') {
+            const picked = data['charDesc' + charTeam];
+            desc = (picked && window.players[picked]) ? picked : (teamMembers[0] || null);
+        } else {
+            // 한 명씩 돌아가며 — 팀별로 몇 번째 차례인지 세어 둔다
+            const turn = (charRot[charTeam] || 0);
+            desc = teamMembers.length ? teamMembers[turn % teamMembers.length] : null;
+            charRot = Object.assign({}, charRot, { [charTeam]: turn + 1 });
+        }
+    }
+
     const useBuzzer = buzzerEnabled || mode === 'charades';
     const isWords4 = mode === 'words4';
     const timerSec = data.timer_seconds || 3;
@@ -500,6 +595,7 @@ window.startQuizGame = async function() {
         question: qData.q, answer: qData.a,
         img: qData.img || null, hints: qData.hints || null,
         describer: desc || null, winner: null,
+        charTeam: charTeam, charCat: charCat, charRot: charRot,
         usedQuestions: usedQuestions,
         buzzer_countdown: useBuzzer ? 3 : 0,
         buzzer_active: !useBuzzer && !isWords4,
@@ -621,9 +717,18 @@ window.pressBuzzer = async function() {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snap = await window.firebaseGet(roomRef);
     let d = snap.val();
-    if (d.buzzer_active && !d.buzzer_winner) {
-        window.firebaseUpdate(roomRef, { buzzer_winner: window.myPlayerId, buzzer_active: false });
+    if (!d.buzzer_active || d.buzzer_winner) return;
+
+    const isCharades = d.gameMode === 'charades';
+    const myTeam = (d.globalTeams && d.globalTeams[window.myPlayerId]) || 'A';
+    if (isCharades) {
+        if (d.describer === window.myPlayerId) return;            // 출제자는 못 누른다
+        if ((d.charAnswerScope || 'team') === 'team' && myTeam !== (d.charTeam || 'A')) return;
+    } else if (d.buzzer_mode === 'A' && d.last_buzzer_team === myTeam) {
+        return;
     }
+
+    window.firebaseUpdate(roomRef, { buzzer_winner: window.myPlayerId, buzzer_active: false });
 };
 
 window.hostBuzzerCorrect = async function(winnerId) {
@@ -642,7 +747,10 @@ window.hostBuzzerWrong = async function() {
     const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
     let snap = await window.firebaseGet(roomRef);
     let d = snap.val();
-    let wrongTeam = d.globalTeams ? d.globalTeams[d.buzzer_winner] : null;
+    // 몸으로 말해요는 차례가 정해져 있으므로 '방금 틀린 팀' 개념을 쓰지 않는다
+    const wrongTeam = (d.gameMode === 'charades')
+        ? null
+        : (d.globalTeams ? d.globalTeams[d.buzzer_winner] : null);
     window.firebaseUpdate(roomRef, { buzzer_winner: null, buzzer_active: true, last_buzzer_team: wrongTeam });
 };
 

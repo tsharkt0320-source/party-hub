@@ -630,6 +630,8 @@ body.is-host .guest-only { display: none; }
 }
 .bz-mem-row.hit { background: rgba(250,204,21,0.2); box-shadow: inset 0 0 0 1px #facc15; }
 .bz-mem-empty { color: #64748b; font-size: 0.76rem; padding: 4px 0; }
+.bz-desc-badge { font-size: 0.8rem; flex-shrink: 0; }
+.bz-team.dim { opacity: 0.45; }
 
 .bz-adj { display: flex; gap: 4px; margin-top: 4px; }
 .bz-adj button {
