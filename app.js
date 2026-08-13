@@ -19,6 +19,7 @@ const screens = {
     liar: document.getElementById('screen-liar'),
     quiz: document.getElementById('screen-quiz'),
     minigames: document.getElementById('screen-minigames'),
+    record: document.getElementById('screen-record'),
     buzzer: document.getElementById('screen-buzzer')
 };
 
@@ -587,6 +588,7 @@ function joinRoomLogic(code, nickname) {
         if (gameState === 'quiz' && typeof window.updateQuiz === 'function') window.updateQuiz(data);
         if (gameState === 'minigames' && typeof window.updateMinigames === 'function') window.updateMinigames(data);
         if (gameState === 'buzzer' && typeof window.updateBuzzer === 'function') window.updateBuzzer(data);
+        if (gameState === 'record' && typeof window.updateRecord === 'function') window.updateRecord(data);
     });
 
     // 탭을 닫을 때도 즉시 정리 (방은 지우지 않는다)
@@ -747,6 +749,9 @@ gameButtons.forEach(btn => {
 
             // 부저는 들어가자마자 카운트다운부터 시작한다
             if (game === 'buzzer' && typeof window.bzReset === 'function') window.bzReset();
+
+            // 기록 게임은 항상 목록부터 보여준다
+            if (game === 'record') window.firebaseUpdate(roomRef, { recordState: 'menu' });
         }
     });
 });
@@ -961,6 +966,11 @@ startApp();
 
 // State Handler
 function handleStateChange(state, data) {
+    // 기록 게임을 벗어나면 돌고 있던 판을 확실히 끈다 (안 보이는 곳에서 계속 도는 것 방지)
+    if (state !== 'record') {
+        if (window._missileRunning && typeof window.stopMissileGame === 'function') window.stopMissileGame(false);
+        if (typeof window.closeZombie === 'function') window.closeZombie();
+    }
     showScreen(state); // 'lobby', 'mafia', 'liar', 'quiz'
     if (state !== 'lobby') {
         // Clear previous game content

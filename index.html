@@ -160,6 +160,7 @@
                     <button class="btn game-btn" data-game="liar">🤥 라이어 게임</button>
                     <button class="btn game-btn" data-game="quiz">🎉 파티 퀴즈 모음집</button>
                     <button class="btn game-btn" data-game="minigames">🎲 복불복 미니게임</button>
+                    <button class="btn game-btn" data-game="record">🏆 기록 게임</button>
                     <button class="btn game-btn" data-game="buzzer">🚨 부저만 사용</button>
                 </div>
 
@@ -215,6 +216,12 @@
             <h2>🎲 복불복 미니게임</h2>
             <div id="minigames-content"></div>
         </div>
+        <!-- 기록 게임 화면 -->
+        <div id="screen-record" class="screen">
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
+            <h2>🏆 기록 게임</h2>
+            <div id="record-content"></div>
+        </div>
         <!-- 부저만 사용 화면 -->
         <div id="screen-buzzer" class="screen">
             <button class="btn-float-back back-to-lobby host-only">◁</button>
@@ -229,6 +236,7 @@
     <script src="quiz_db.js"></script>
     <script src="quiz.js"></script>
     <script src="minigames.js"></script>
+    <script src="record.js"></script>
     <script src="buzzer.js"></script>
     <script type="module" src="app.js"></script>
     
