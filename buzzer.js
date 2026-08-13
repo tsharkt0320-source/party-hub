@@ -71,32 +71,38 @@ window.updateBuzzer = function(data) {
     }
 
     if (mode === 'team') {
-        // --- 팀 점수 ---
+        // --- 팀 상자 안에 그 팀 사람들을 넣는다 (상자 색으로 소속을 안다) ---
         const t = bzTeamTotals(data);
+        const teams = data.globalTeams || {};
+        const members = { A: [], B: [] };
+        ids.forEach(id => { members[teams[id] === 'B' ? 'B' : 'A'].push(id); });
+
+        const memberHtml = (id) => {
+            const hit = (winner === id);
+            return '<div class="bz-mem-row' + (hit ? ' hit' : '') + '">' +
+                       '<span class="bz-lamp' + (hit ? ' on' : '') + '"></span>' +
+                       '<span class="bz-nm">' + bzEsc((window.players[id] || {}).name || '?') +
+                           (id === window.myPlayerId ? '<b style="color:#facc15;"> (나)</b>' : '') +
+                       '</span>' +
+                   '</div>';
+        };
+
         const box = (key, name, score, color, bg) =>
-            '<div class="bz-team" style="background:' + bg + '; border:1px solid ' + color + ';">' +
+            '<div class="bz-team" style="background:' + bg + '; border:1.5px solid ' + color + ';">' +
                 '<div class="bz-tname" style="color:' + color + ';">' + bzEsc(name) + '</div>' +
                 '<div class="bz-tscore" style="color:' + color + ';">' + score + '</div>' +
                 (host ? bzAdjHtml(key) : '') +
+                '<div class="bz-mem">' +
+                    (members[key].length
+                        ? members[key].map(memberHtml).join('')
+                        : '<div class="bz-mem-empty">비어 있음</div>') +
+                '</div>' +
             '</div>';
-        html += '<div class="bz-teams">' +
-                box('A', data.teamAName || 'A팀', t.a, '#60a5fa', 'rgba(59,130,246,0.18)') +
-                box('B', data.teamBName || 'B팀', t.b, '#f87171', 'rgba(239,68,68,0.18)') +
-                '</div>';
 
-        // --- 참여자 부저 (이름 앞에 램프) ---
-        html += '<div class="bz-chips">';
-        ids.forEach(id => {
-            const hit = (winner === id);
-            const teamColor = ((data.globalTeams || {})[id] || 'A') === 'A' ? '#60a5fa' : '#f87171';
-            html += '<div class="bz-chip' + (hit ? ' hit' : '') + '">' +
-                        '<span class="bz-lamp' + (hit ? ' on' : '') + '"></span>' +
-                        '<span style="color:' + teamColor + '; font-size:0.7rem;">●</span>' +
-                        bzEsc((window.players[id] || {}).name || '?') +
-                        (id === window.myPlayerId ? '<b style="color:#fbbf24;"> (나)</b>' : '') +
-                    '</div>';
-        });
-        html += '</div>';
+        html += '<div class="bz-teams">' +
+                box('A', data.teamAName || 'A팀', t.a, '#60a5fa', 'rgba(59,130,246,0.16)') +
+                box('B', data.teamBName || 'B팀', t.b, '#f87171', 'rgba(239,68,68,0.16)') +
+                '</div>';
     } else {
         // --- 개인 점수 + 부저를 한 줄에 ---
         const scores = data.globalScores || {};
@@ -125,7 +131,7 @@ window.updateBuzzer = function(data) {
         html += '<div class="bz-stage bz-hit">' +
                     '<div style="font-size:2rem; line-height:1;">🚨</div>' +
                     '<div class="bz-wname">' + bzEsc((window.players[winner] || {}).name || '누군가') + '</div>' +
-                    '<div style="color:#fecaca; font-size:0.95rem;">눌렀습니다!</div>' +
+                    '<div style="color:#fde68a; font-size:0.95rem;">눌렀습니다!</div>' +
                 '</div>';
     } else if (active) {
         html += '<button class="bz-press" onclick="window.bzPress()">🚨</button>';

@@ -442,10 +442,25 @@ body.is-host .guest-only { display: none; }
 }
 .bz-mode.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 
-.bz-teams { display: flex; gap: 8px; margin-bottom: 8px; }
-.bz-team { flex: 1; border-radius: 10px; padding: 6px 8px 7px; text-align: center; }
-.bz-tname { font-size: 0.75rem; }
+.bz-teams { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+.bz-team { flex: 1; min-width: 0; border-radius: 12px; padding: 7px 7px 8px; text-align: center; }
+.bz-tname { font-size: 0.78rem; font-weight: bold; }
 .bz-tscore { font-size: 1.6rem; font-weight: 900; line-height: 1.15; }
+
+/* 팀 상자 안의 사람들 — 상자 색이 곧 소속이다 */
+.bz-mem { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.bz-mem-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 7px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.28);
+    font-size: 0.82rem;
+    text-align: left;
+}
+.bz-mem-row.hit { background: rgba(250,204,21,0.2); box-shadow: inset 0 0 0 1px #facc15; }
+.bz-mem-empty { color: #64748b; font-size: 0.76rem; padding: 4px 0; }
 
 .bz-adj { display: flex; gap: 4px; margin-top: 4px; }
 .bz-adj button {
@@ -461,19 +476,6 @@ body.is-host .guest-only { display: none; }
 }
 .bz-adj button:active { background: rgba(255,255,255,0.15); }
 
-.bz-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-.bz-chip {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid transparent;
-    font-size: 0.85rem;
-}
-.bz-chip.hit { background: rgba(239,68,68,0.22); border-color: var(--danger); }
-
 .bz-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .bz-row {
     display: flex;
@@ -484,23 +486,23 @@ body.is-host .guest-only { display: none; }
     background: rgba(255,255,255,0.06);
     font-size: 0.9rem;
 }
-.bz-row.hit { background: rgba(239,68,68,0.22); box-shadow: inset 0 0 0 1px var(--danger); }
+.bz-row.hit { background: rgba(250,204,21,0.2); box-shadow: inset 0 0 0 1px #facc15; }
 .bz-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bz-sc { font-weight: 900; color: #fbbf24; min-width: 2.2em; text-align: right; }
+.bz-sc { font-weight: 900; color: #e2e8f0; min-width: 2.2em; text-align: right; }
 .bz-row .bz-adj { margin-top: 0; width: 76px; flex-shrink: 0; }
 
-/* 이름 앞 부저 램프 */
+/* 이름 앞 부저 램프 — 팀 색(파랑/빨강)과 겹치지 않도록 노란색 */
 .bz-lamp {
-    width: 11px;
-    height: 11px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background: #475569;
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.7);
     flex-shrink: 0;
 }
 .bz-lamp.on {
-    background: #ef4444;
-    box-shadow: 0 0 9px 2px rgba(239,68,68,0.85);
+    background: #facc15;
+    box-shadow: 0 0 10px 2px rgba(250,204,21,0.9);
     animation: bzBlink 0.65s infinite alternate;
 }
 @keyframes bzBlink { from { opacity: 1; } to { opacity: 0.4; } }
@@ -521,20 +523,20 @@ body.is-host .guest-only { display: none; }
 }
 .bz-wait { background: rgba(255,255,255,0.05); }
 .bz-cd { font-size: 3.5rem; font-weight: 900; color: #fbbf24; line-height: 1; animation: pulse 1s infinite; }
-.bz-hit { background: rgba(239,68,68,0.22); border: 2px solid var(--danger); animation: pulse 1s infinite; }
+.bz-hit { background: rgba(250,204,21,0.2); border: 2px solid #facc15; animation: pulse 1s infinite; }
 .bz-wname { font-size: 1.8rem; font-weight: 900; color: #fff; line-height: 1.2; }
 
 .bz-press {
     width: 100%;
     border: 0;
-    background: var(--danger);
-    color: #fff;
+    background: #facc15;
+    color: #422006;
     font-size: 2.6rem;
     font-weight: 900;
-    box-shadow: 0 8px 0 #991b1b;
+    box-shadow: 0 8px 0 #a16207;
     cursor: pointer;
 }
-.bz-press:active { transform: translateY(4px); box-shadow: 0 4px 0 #991b1b; }
+.bz-press:active { transform: translateY(4px); box-shadow: 0 4px 0 #a16207; }
 .bz-press[disabled] {
     background: #475569;
     box-shadow: 0 8px 0 #334155;
