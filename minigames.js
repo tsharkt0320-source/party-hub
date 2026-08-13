@@ -42,7 +42,7 @@ window.updateMinigames = function(data) {
                         <button class="btn secondary" onclick="startMinigame('arrow')">🎯 화살표돌리기</button>
                         <button class="btn secondary" onclick="startMinigame('draw')">🎁 당첨자추첨</button>
                         <button class="btn secondary" style="grid-column:1 / -1; background:#7c2d12;" onclick="startMinigame('missile')">🚀 미사일 피하기 (기록 대결)</button>
-                        <button class="btn secondary" style="grid-column:1 / -1; background:#4f46e5; border-color:#6366f1;" onclick="window.open('zombie.html', '_blank')">🧟 네온 좀비 서바이버 (싱글플레이)</button>
+                        <button class="btn secondary" style="grid-column:1 / -1; background:#4f46e5;" onclick="startMinigame('zombie')">🧟 네온 좀비 서바이버 (기록 대결)</button>
                     </div>
                 </div>
             `;
@@ -51,7 +51,7 @@ window.updateMinigames = function(data) {
                 <div style="text-align:center; margin-top:30px;">
                     <h3 style="color:#fbbf24;">⏳ 방장이 미니게임을 고르고 있습니다...</h3>
                     <p style="color:#94a3b8; margin-top:10px;">(사다리타기, 룰렛 등)</p>
-                    <button class="btn secondary" style="width:100%; margin-top:20px; background:#4f46e5; border-color:#6366f1;" onclick="window.open('zombie.html', '_blank')">🧟 네온 좀비 서바이버 (싱글플레이)</button>
+
                 </div>
             `;
         }
@@ -108,6 +108,9 @@ window.startMinigame = function(type) {
     } else if (type === 'missile') {
         initialData.missileLevel = 'normal';
         initialData.missileScores = null; // 새 판이므로 기록 초기화
+    } else if (type === 'zombie') {
+        initialData.phase = 'playing';
+        initialData.zombieScores = null;
     }
 
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), initialData);
@@ -131,6 +134,8 @@ function renderSpecificMinigame(data) {
         html += renderDraw(data);
     } else if (type === 'missile') {
         html += renderMissile(data);
+    } else if (type === 'zombie') {
+        html += renderZombie(data);
     }
 
     return html;
@@ -1261,6 +1266,130 @@ function submitMissileScore(elapsedMs) {
             name: (window.players[window.myPlayerId] || {}).name || '?',
             ms: best,
             last: ms,
+            tries: tries
+        }
+    );
+}
+
+
+// --- 🧟 네온 좀비 서바이버 (Zombie) ---
+// 게임 본체는 zombie.html 이 통째로 담당한다. 여기서는 앱 안에 띄우고
+// 끝났을 때 점수를 받아 공용 기록판에 올리는 일만 한다.
+
+function zombieBoardHtml(data) {
+    const scores = data.zombieScores || {};
+    const rows = Object.keys(scores).map(id => Object.assign({ id: id }, scores[id]))
+                       .sort((a, b) => (b.score || 0) - (a.score || 0));
+    const notYet = Object.keys(window.players || {}).filter(id => !scores[id]);
+
+    let html = '<div class="card" style="margin-top:15px; text-align:left;">' +
+               '<h3 style="color:#a78bfa; margin-bottom:12px; text-align:center;">🏆 최고 점수</h3>';
+
+    if (rows.length === 0) {
+        html += '<p style="color:#94a3b8; text-align:center; font-size:0.9rem;">아직 아무도 도전하지 않았습니다.</p>';
+    } else {
+        const medals = ['🥇', '🥈', '🥉'];
+        rows.forEach((r, i) => {
+            const isMe = r.id === window.myPlayerId;
+            const rank = medals[i] || ((i + 1) + '위');
+            html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; border-radius:8px;' +
+                    ' background:' + (isMe ? 'rgba(167,139,250,0.18)' : 'rgba(255,255,255,0.05)') + ';' +
+                    ' border:1px solid ' + (isMe ? '#a78bfa' : 'transparent') + ';">' +
+                        '<span style="font-size:0.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+                            '<b style="display:inline-block; min-width:2.2em;">' + rank + '</b> ' +
+                            mgEsc(r.name) + (isMe ? ' <span style="color:#a78bfa;">(나)</span>' : '') +
+                        '</span>' +
+                        '<span style="text-align:right; flex-shrink:0; margin-left:8px;">' +
+                            '<b style="color:#c4b5fd; font-size:1.05rem;">' + (r.score || 0).toLocaleString() + '</b>' +
+                            '<span style="color:#94a3b8; font-size:0.78rem;"> · Wave ' + (r.wave || 1) + '</span>' +
+                        '</span>' +
+                    '</div>';
+        });
+    }
+
+    if (notYet.length > 0) {
+        const names = notYet.map(id => mgEsc((window.players[id] || {}).name || '?')).join(', ');
+        html += '<p style="color:#94a3b8; font-size:0.8rem; margin-top:10px; text-align:center;">아직 안 한 사람: ' + names + '</p>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderZombieBoard(data) {
+    const holder = document.getElementById('zombie-board');
+    if (holder) holder.innerHTML = zombieBoardHtml(data);
+}
+
+function renderZombie(data) {
+    const my = (data.zombieScores || {})[window.myPlayerId];
+    let html = '<div class="card" style="text-align:center;">' +
+               '<h3 style="color:#a78bfa; margin-bottom:10px;">🧟 네온 좀비 서바이버</h3>' +
+               '<p style="color:#cbd5e1; font-size:0.9rem; margin-bottom:14px;">' +
+               '몰려오는 좀비를 피해 최대한 오래 버티세요.<br>각자 플레이하고 최고 점수로 겨룹니다.</p>';
+
+    if (my) {
+        html += '<div style="margin-bottom:12px; padding:12px; border-radius:10px; background:rgba(167,139,250,0.12); border:1px solid #a78bfa;">' +
+                '<span style="color:#c4b5fd;">내 최고 점수 <b style="font-size:1.3rem;">' + (my.score || 0).toLocaleString() + '</b>' +
+                ' <span style="color:#94a3b8; font-size:0.8rem;">(Wave ' + (my.wave || 1) + ' · ' + (my.tries || 1) + '번 도전)</span></span></div>';
+    }
+
+    html += '<button class="btn primary" style="width:100%; padding:16px; font-size:1.15rem; background:#7c3aed;"' +
+            ' onclick="window.openZombie()">' + (my ? '🔁 다시 도전하기' : '▶ 시작하기') + '</button>';
+
+    if (window.isHost) {
+        html += '<button class="btn secondary" style="width:100%; margin-top:8px; background:#4b5563;" onclick="window.resetZombieScores()">기록 초기화</button>';
+    }
+    html += '</div>';
+    html += '<div id="zombie-board">' + zombieBoardHtml(data) + '</div>';
+    return html;
+}
+
+window.resetZombieScores = function() {
+    if (!window.isHost) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { zombieScores: null });
+};
+
+// 앱 안에서 바로 열기 (새 창을 띄우지 않는다)
+window.openZombie = function() {
+    if (document.getElementById('zombie-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'zombie-wrap';
+    wrap.style.cssText = 'position:fixed; inset:0; z-index:9998; background:#000;';
+    wrap.innerHTML =
+        '<iframe src="zombie.html" style="width:100%; height:100%; border:0; display:block;"></iframe>' +
+        '<button onclick="window.closeZombie()" style="position:absolute; top:calc(env(safe-area-inset-top, 0px) + 10px); right:10px; z-index:9999;' +
+        ' padding:8px 14px; border-radius:999px; border:1px solid rgba(255,255,255,0.35);' +
+        ' background:rgba(0,0,0,0.55); color:#fff; font-size:0.85rem; font-weight:bold;">✕ 나가기</button>';
+    document.body.appendChild(wrap);
+};
+
+window.closeZombie = function() {
+    const w = document.getElementById('zombie-wrap');
+    if (w) w.remove();
+};
+
+// 게임이 끝나면 zombie.html 이 점수를 보내온다
+window.addEventListener('message', function(e) {
+    if (e.origin !== window.location.origin) return; // 다른 곳에서 온 메시지는 무시
+    const d = e.data;
+    if (!d || d.type !== 'zombie_score') return;
+    submitZombieScore(Number(d.score) || 0, Number(d.wave) || 1);
+});
+
+function submitZombieScore(score, wave) {
+    if (!window.myRoom || !window.db || !window.myPlayerId) return;
+    const all = (window._missileData && window._missileData.zombieScores) || {};
+    const prev = all[window.myPlayerId];
+    const best = (prev && (prev.score || 0) > score) ? prev : { score: score, wave: wave };
+    const tries = ((prev && prev.tries) || 0) + 1;
+
+    window.firebaseUpdate(
+        window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/zombieScores/' + window.myPlayerId),
+        {
+            name: (window.players[window.myPlayerId] || {}).name || '?',
+            score: best.score,
+            wave: best.wave,
+            last: score,
             tries: tries
         }
     );

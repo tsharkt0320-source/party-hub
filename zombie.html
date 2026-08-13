@@ -3105,6 +3105,17 @@ function gameOver() {
     isPlaying = false;
     finalScoreDisplay.innerText = `Score: ${score}  |  Wave: ${wave}`;
     gameoverOverlay.classList.add('active');
+
+    // 파티 허브 안에서 실행 중이면 기록을 부모 화면으로 보낸다.
+    // 따로 열었을 때는 부모가 없으므로 아무 일도 일어나지 않는다.
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+                { type: 'zombie_score', score: score, wave: wave },
+                window.location.origin
+            );
+        }
+    } catch (e) { /* 무시 */ }
 }
 
 const inventoryBtn = document.getElementById('inventoryBtn');
