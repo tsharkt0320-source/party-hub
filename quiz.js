@@ -579,9 +579,9 @@ window.submitGuess = async function() {
         }
         
         // 2. 오타 허용 (레벤슈타인 거리)
-        // 세 글자 이상일 때 한 글자 오타 허용, 여섯 글자 이상일 때 두 글자 오타 허용
+        // 네 글자 이상일 때 한 글자 오타 허용, 여섯 글자 이상일 때 두 글자 오타 허용
         let dist = window.getEditDistance(guess, cleanAns);
-        if (cleanAns.length >= 3 && dist <= 1) {
+        if (cleanAns.length >= 4 && dist <= 1) {
             isCorrect = true; break;
         }
         if (cleanAns.length >= 6 && dist <= 2) {
