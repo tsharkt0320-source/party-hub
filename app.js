@@ -18,7 +18,8 @@ const screens = {
     mafia: document.getElementById('screen-mafia'),
     liar: document.getElementById('screen-liar'),
     quiz: document.getElementById('screen-quiz'),
-    minigames: document.getElementById('screen-minigames')
+    minigames: document.getElementById('screen-minigames'),
+    buzzer: document.getElementById('screen-buzzer')
 };
 
 const navCreate = document.getElementById('nav-create');
@@ -585,6 +586,7 @@ function joinRoomLogic(code, nickname) {
         if (gameState === 'liar' && typeof window.updateLiar === 'function') window.updateLiar(data);
         if (gameState === 'quiz' && typeof window.updateQuiz === 'function') window.updateQuiz(data);
         if (gameState === 'minigames' && typeof window.updateMinigames === 'function') window.updateMinigames(data);
+        if (gameState === 'buzzer' && typeof window.updateBuzzer === 'function') window.updateBuzzer(data);
     });
 
     // 탭을 닫을 때도 즉시 정리 (방은 지우지 않는다)
@@ -742,6 +744,9 @@ gameButtons.forEach(btn => {
             
             // Example: simple initialization, modules will handle specific data
             window.firebaseUpdate(roomRef, initialGameState);
+
+            // 부저는 들어가자마자 카운트다운부터 시작한다
+            if (game === 'buzzer' && typeof window.bzReset === 'function') window.bzReset();
         }
     });
 });

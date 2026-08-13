@@ -98,7 +98,7 @@
                 <p id="install-hint" style="display:none; margin-top:10px; font-size:0.82rem; color:#94a3b8; line-height:1.6; text-align:left; padding:12px; background:rgba(255,255,255,0.04); border-radius:10px;"></p>
             </div>
 
-            <p style="margin-top:26px; font-size:0.75rem; color:#475569;">ver 2.0</p>
+            <p style="margin-top:26px; font-size:0.75rem; color:#475569;">ver 2.1</p>
         </div>
 
         <!-- 방 만들기 화면 -->
@@ -160,6 +160,7 @@
                     <button class="btn game-btn" data-game="liar">🤥 라이어 게임</button>
                     <button class="btn game-btn" data-game="quiz">🎉 파티 퀴즈 모음집</button>
                     <button class="btn game-btn" data-game="minigames">🎲 복불복 미니게임</button>
+                    <button class="btn game-btn" data-game="buzzer">🚨 부저만 사용</button>
                 </div>
 
                 <details class="host-tools">
@@ -214,6 +215,12 @@
             <h2>🎲 복불복 미니게임</h2>
             <div id="minigames-content"></div>
         </div>
+        <!-- 부저만 사용 화면 -->
+        <div id="screen-buzzer" class="screen">
+            <button class="btn-float-back back-to-lobby host-only">◁</button>
+            <h2 style="font-size:1.15rem; margin-bottom:10px;">🚨 부저만 사용</h2>
+            <div id="buzzer-content"></div>
+        </div>
     </div>
 
     <!-- The main logic is loaded after the body and firebase -->
@@ -222,6 +229,7 @@
     <script src="quiz_db.js"></script>
     <script src="quiz.js"></script>
     <script src="minigames.js"></script>
+    <script src="buzzer.js"></script>
     <script type="module" src="app.js"></script>
     
 </body>

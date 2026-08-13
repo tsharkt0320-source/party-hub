@@ -33,7 +33,9 @@ window.updateQuiz = function(data) {
     const individualScores = data.individualScores || {};
     
     // Team score summary bar
-    let teamAScore = 0, teamBScore = 0;
+    // teamBonus = 부저 게임에서 방장이 직접 올리고 내린 몫. 두 화면의 점수가 어긋나지 않게 함께 더한다.
+    const teamBonus = data.teamBonus || {};
+    let teamAScore = Number(teamBonus.A) || 0, teamBScore = Number(teamBonus.B) || 0;
     Object.keys(globalScores).forEach(pId => {
         let t = globalTeams[pId] || 'A';
         if (t === 'A') teamAScore += (globalScores[pId] || 0);
@@ -82,8 +84,8 @@ window.updateQuiz = function(data) {
             { id: 'charades', name: '몸으로 말해요' },
             { id: 'person_image', name: '인물 퀴즈 (사진)' },
             { id: 'person_text', name: '인물 퀴즈 (스무고개)' },
-            { id: 'proverb_meaning', name: '속담 뜻 맞추기' },
-            { id: 'buzzer_only', name: '🚨 부저만 사용하기' }
+            { id: 'proverb_meaning', name: '속담 뜻 맞추기' }
+            // 🚨 부저만 사용하기 → 로비의 독립 게임으로 옮겼다 (buzzer.js)
         ];
 
         let modeSelectHtml = modeOptions.map(m => 
@@ -105,15 +107,12 @@ window.updateQuiz = function(data) {
                         </select>
                     </div>`;
             
-            // Category (not for buzzer_only)
-            if (selectedMode !== 'buzzer_only') {
-                html += `<div style="margin-bottom:15px; text-align:left;">
+            html += `<div style="margin-bottom:15px; text-align:left;">
                         <label style="color:#cbd5e1; font-size:0.9rem;">카테고리</label>
                         <select id="quiz-cat-select" class="input-group input" style="width:100%; margin-top:5px; padding:10px;" onchange="window.updateQuizSetup()">
                             ${catSelectHtml}
                         </select>
                     </div>`;
-            }
             
             // Points multiplier
             html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; text-align:left;">
@@ -134,8 +133,8 @@ window.updateQuiz = function(data) {
                         </div>
                      </div>`;
 
-            // Buzzer toggle (not for words4 or buzzer_only)
-            if (selectedMode !== 'words4' && selectedMode !== 'buzzer_only') {
+            // Buzzer toggle (not for words4)
+            if (selectedMode !== 'words4') {
                 html += `<div style="margin-bottom:15px; text-align:left;">
                             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                 <input type="checkbox" id="quiz-buzzer-toggle" ${buzzerEnabled?'checked':''} onchange="window.toggleBuzzer()">
@@ -183,7 +182,7 @@ window.updateQuiz = function(data) {
                 html += `</div>`;
             }
 
-            html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:16px;" onclick="window.startQuizGame()">🚀 ${selectedMode === 'buzzer_only' ? '부저 시작' : '문제 출제하기'}</button>
+            html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:16px;" onclick="window.startQuizGame()">🚀 문제 출제하기</button>
                 </div>
                 <details class="host-tools">
                     <summary>🧹 초기화</summary>
@@ -211,7 +210,6 @@ window.updateQuiz = function(data) {
         const mode = data.gameMode;
         const isCharades = mode === 'charades';
         const isWords4 = mode === 'words4';
-        const isBuzzerOnly = mode === 'buzzer_only';
         const buzzerEnabled = data.buzzer_enabled || false;
         const myTeam = (data.globalTeams && data.globalTeams[window.myPlayerId]) || 'A';
         const amIDescriber = window.myPlayerId === data.describer;
@@ -219,7 +217,7 @@ window.updateQuiz = function(data) {
         const canControl = window.isHost || amICaptain;
 
         // === QUESTION DISPLAY ===
-        if (!isBuzzerOnly) {
+        {
             html += `<div class="card" style="margin-bottom:20px;">
                         <div style="color:var(--text-muted); font-size:0.9rem; margin-bottom:10px;">${data.category || ''}</div>`;
             
@@ -310,28 +308,7 @@ window.updateQuiz = function(data) {
             }
         } else {
             // === INPUT / BUZZER AREA ===
-            if (isBuzzerOnly) {
-                // Standalone buzzer
-                if (data.buzzer_countdown > 0) {
-                    html += `<div class="card" style="text-align:center;">
-                                <div style="font-size:6rem; font-weight:900; color:#fbbf24; animation: pulse 1s infinite;">${data.buzzer_countdown}</div>
-                             </div>`;
-                } else if (data.buzzer_winner) {
-                    let bName = window.players[data.buzzer_winner]?.name || '누군가';
-                    html += `<div class="card" style="background:rgba(239,68,68,0.2); border:2px solid var(--danger);">
-                                <h2 style="color:var(--danger); margin-bottom:10px;">🚨 ${bName}!</h2>
-                             </div>`;
-                    if (canControl) {
-                        html += `<button class="btn primary" style="width:100%; margin-top:15px; padding:15px;" onclick="window.resetBuzzerOnly()">🔄 부저 리셋</button>`;
-                    }
-                } else {
-                    html += `<button class="btn danger" style="width:100%; height:200px; font-size:4rem; border-radius:20px; box-shadow: 0 10px 0 #991b1b;" onclick="window.pressBuzzer()">🚨</button>`;
-                }
-                if (canControl) {
-                    html += `<button class="btn secondary" style="width:100%; margin-top:15px;" onclick="window.backToQuizLobby()">⚙️ 설정으로</button>`;
-                }
-            }
-            else if (isWords4 && !data.words4_failed) {
+            if (isWords4 && !data.words4_failed) {
                 // 4글자 - no input, just next button for host/captain
                 if (canControl) {
                     html += `<div style="display:flex; gap:10px; margin-top:10px;">
@@ -485,21 +462,6 @@ window.startQuizGame = async function() {
     const buzzerEnabled = data.buzzer_enabled || false;
     const winPoints = data.win_points || 1;
     
-    if (mode === 'buzzer_only') {
-        window.firebaseUpdate(roomRef, {
-            quizState: 'playing', gameMode: 'buzzer_only',
-            buzzer_countdown: 3, buzzer_active: false, buzzer_winner: null
-        });
-        let c = 3;
-        window._quizBuzzerIv = setInterval(() => {
-            if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
-            c--;
-            if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
-            else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
-        }, 1000);
-        return;
-    }
-    
     if (!window.QUIZ_DB[mode] || !window.QUIZ_DB[mode][cat]) { cat = '랜덤'; }
     const questions = window.QUIZ_DB[mode][cat];
     if (!questions || questions.length === 0) { alert("문제가 없습니다."); return; }
@@ -627,19 +589,6 @@ window.hostBuzzerWrong = async function() {
     let d = snap.val();
     let wrongTeam = d.globalTeams ? d.globalTeams[d.buzzer_winner] : null;
     window.firebaseUpdate(roomRef, { buzzer_winner: null, buzzer_active: true, last_buzzer_team: wrongTeam });
-};
-
-window.resetBuzzerOnly = async function() {
-    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
-    const round = newQuizRound();
-    window.firebaseUpdate(roomRef, { buzzer_countdown: 3, buzzer_active: false, buzzer_winner: null });
-    let c = 3;
-    window._quizBuzzerIv = setInterval(() => {
-        if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
-        c--;
-        if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
-        else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
-    }, 1000);
 };
 
 window.voteHint = async function() {
