@@ -107,7 +107,7 @@ window.QUIZ_DB = {
         '랜덤': []
     },
     person_image: {
-        '유명인 (캐리커처)': [
+        '유명인 (사진)': [
             {q: '이 사람은 누구일까요?', a: '유재석', img: 'images/yoo.jpg'},
             {q: '이 사람은 누구일까요?', a: '아이유', img: 'images/iu.jpg'},
             {q: '이 사람은 누구일까요?', a: '손흥민', img: 'images/son.jpg'},
@@ -120,7 +120,8 @@ window.QUIZ_DB = {
             {q: '이 사람은 누구일까요?', a: '박명수', img: 'images/parkmyungsoo.jpg'},
             {q: '이 사람은 누구일까요?', a: '문희준', img: 'images/moonheejun.jpg'},
             {q: '이 사람은 누구일까요?', a: '원빈', img: 'images/wonbin.jpg'},
-            {q: '이 사람은 누구일까요?', a: '전지현', img: 'images/jeonjihyun.jpg'}
+            {q: '이 사람은 누구일까요?', a: '전지현', img: 'images/jeonjihyun.jpg'},
+            {q: '이 사람은 누구일까요?', a: '이병헌', img: 'images/leebyunghun.png'}
         ],
         '랜덤': []
     },
