@@ -122,7 +122,12 @@ window.QUIZ_DB = {
             {q: '이 사람은 누구일까요?', a: '원빈', img: 'images/wonbin.jpg'},
             {q: '이 사람은 누구일까요?', a: '전지현', img: 'images/jeonjihyun.jpg'},
             {q: '이 사람은 누구일까요?', a: '이병헌', img: 'images/leebyunghun.png'},
-            {q: '이 사람은 누구일까요?', a: '이강인', img: 'images/leekangin.png'}
+            {q: '이 사람은 누구일까요?', a: '이강인', img: 'images/leekangin.png'},
+            {q: '이 사람은 누구일까요?', a: '임영웅', img: 'images/limyoungwoong.png'},
+            {q: '이 그룹은 누구일까요?', a: '방탄소년단', img: 'images/bts.png'},
+            {q: '이 사람은 누구일까요?', a: '김광규', img: 'images/kimgwanggyu.png'},
+            {q: '이 사람은 누구일까요?', a: '한석규', img: 'images/hanseokgyu.png'},
+            {q: '이 사람은 누구일까요?', a: '허성태', img: 'images/heoseongtae.png'}
         ],
         '랜덤': []
     },
