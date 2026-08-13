@@ -294,10 +294,11 @@ window.updateQuiz = function(data) {
         // === WINNER DISPLAY ===
         if (data.winner) {
             let winName = window.players[data.winner]?.name || '누군가';
+            let displayAns = Array.isArray(data.answer) ? data.answer[0] : data.answer;
             html += `
                 <div class="card" style="background:var(--success); border: 2px solid #fff; box-shadow: 0 0 20px var(--success); animation: pulse 1s infinite;">
                     <h3 style="color:white; margin-bottom:10px;">🎉 정답입니다! 🎉</h3>
-                    <p style="font-size:1.5rem; color:white; font-weight:bold;">정답: ${data.answer}</p>
+                    <p style="font-size:1.5rem; color:white; font-weight:bold;">정답: ${displayAns}</p>
                     <p style="font-size:1.2rem; color:white; margin-top:10px;">맞힌 사람: <strong>${winName}</strong></p>
                 </div>`;
             if (canControl) {
@@ -367,8 +368,8 @@ window.updateQuiz = function(data) {
             else {
                 // Normal text input mode (초성, 인물, 속담 etc.)
                 html += `<div class="input-group" style="display:flex; gap:10px;">
-                            <input type="text" id="input-guess" placeholder="정답을 입력하세요" style="flex:1; font-size:1.2rem; padding:15px;" onkeypress="if(event.key==='Enter') window.submitGuess('${data.answer.replace(/'/g, "\\'")}')">
-                            <button class="btn primary" style="padding:0 20px; font-size:1.1rem;" onclick="window.submitGuess('${data.answer.replace(/'/g, "\\'")}')">확인</button>
+                            <input type="text" id="input-guess" placeholder="정답을 입력하세요" style="flex:1; font-size:1.2rem; padding:15px;" onkeypress="if(event.key==='Enter') window.submitGuess()">
+                            <button class="btn primary" style="padding:0 20px; font-size:1.1rem;" onclick="window.submitGuess()">확인</button>
                         </div>`;
                 if (canControl) {
                     html += `<div class="btn-row" style="margin-top:15px;">
@@ -540,12 +541,65 @@ window.startQuizGame = async function() {
     }
 };
 
-window.submitGuess = async function(correctAnswer) {
+window.getEditDistance = function(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    let matrix = [];
+    for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+    for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+};
+
+window.submitGuess = async function() {
     const input = document.getElementById('input-guess');
     if (!input) return;
-    const guess = input.value.trim().replace(/\s+/g, '');
-    const clean = correctAnswer.replace(/\s+/g, '');
-    if (guess === clean) {
+    const guess = input.value.trim().replace(/\s+/g, '').toLowerCase();
+    
+    const data = window._lastRoomData;
+    if (!data || !data.answer) return;
+    
+    let answers = Array.isArray(data.answer) ? data.answer : [data.answer];
+    let isCorrect = false;
+    
+    for (let ans of answers) {
+        let cleanAns = String(ans).replace(/\s+/g, '').toLowerCase();
+        
+        // 1. 완벽 일치
+        if (guess === cleanAns) {
+            isCorrect = true; break;
+        }
+        
+        // 2. 오타 허용 (레벤슈타인 거리)
+        // 세 글자 이상일 때 한 글자 오타 허용, 여섯 글자 이상일 때 두 글자 오타 허용
+        let dist = window.getEditDistance(guess, cleanAns);
+        if (cleanAns.length >= 3 && dist <= 1) {
+            isCorrect = true; break;
+        }
+        if (cleanAns.length >= 6 && dist <= 2) {
+            isCorrect = true; break;
+        }
+        
+        // 3. 부분 일치 허용 (어절 단위)
+        // 예: '레오나르도 디카프리오' -> ['레오나르도', '디카프리오']
+        let words = String(ans).toLowerCase().split(' ');
+        for (let word of words) {
+            if (word.length >= 2 && guess === word.replace(/\s+/g, '')) {
+                isCorrect = true; break;
+            }
+        }
+        if (isCorrect) break;
+    }
+    
+    if (isCorrect) {
         const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
         let snap = await window.firebaseGet(roomRef);
         let d = snap.val();
@@ -554,11 +608,12 @@ window.submitGuess = async function(correctAnswer) {
         let pts = d.win_points || 1;
         indScores[window.myPlayerId] = (indScores[window.myPlayerId] || 0) + pts;
         gScores[window.myPlayerId] = (gScores[window.myPlayerId] || 0) + pts;
-        newQuizRound(); // 정답이 나왔으니 남은 제한시간 타이머를 무효화
+        newQuizRound(); // 정답이 나왔으니 남은 제한시간 타이머 무효화
         window.firebaseUpdate(roomRef, { winner: window.myPlayerId, individualScores: indScores, globalScores: gScores, words4_timer: 0 });
     } else {
         alert("틀렸습니다! 다시 시도하세요.");
         input.value = '';
+        input.focus();
     }
 };
 
