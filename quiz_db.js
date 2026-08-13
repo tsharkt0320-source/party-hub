@@ -134,7 +134,12 @@ window.QUIZ_DB = {
         ],
         '캐릭터 (사진)': [
             {q: '이 캐릭터는 누구일까요?', a: '버터플', img: 'images/butterfree.png'},
-            {q: '이 캐릭터는 누구일까요?', a: '아구몬', img: 'images/agumon.png'}
+            {q: '이 캐릭터는 누구일까요?', a: '아구몬', img: 'images/agumon.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '하이바라 아이', img: 'images/haibara.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '징징이', img: 'images/squidward.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '뚱이', img: 'images/patrick.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '마이콜', img: 'images/michol.png'},
+            {q: '이 캐릭터는 누구일까요?', a: '이기영', img: 'images/leekiyoung.png'}
         ],
         '랜덤': []
     },
