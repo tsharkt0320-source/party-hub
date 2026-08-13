@@ -21,6 +21,18 @@ function getCategoriesForMode(mode) {
     return cats;
 }
 
+// 몸으로 말해요에서 '다음' 버튼이 무엇을 하는지 이름으로 알려준다
+function charNextLabel(data, isCharades) {
+    if (!isCharades) return '▶ 다음 문제';
+    const total = data.charCount || 5;
+    const idx = (typeof data.charIdx === 'number') ? data.charIdx : 0;
+    if (idx + 1 < total) return '▶ 다음 문제';
+    if ((data.charTeam || 'A') === 'A') {
+        return '▶ ' + (data.teamBName || 'B팀') + ' 차례 시작';
+    }
+    return '🔄 새 판 시작';
+}
+
 window.updateQuiz = function(data) {
     const content = document.getElementById('quiz-content');
     let html = '';
@@ -167,15 +179,27 @@ window.updateQuiz = function(data) {
 
             // 몸으로 말해요 설정
             if (selectedMode === 'charades') {
-                const descMode = data.charDescMode || 'rotate';
+                const descMode = data.charDescMode || 'fixed';
                 const scope = data.charAnswerScope || 'team';
+                const charCount = data.charCount || 5;
                 const gTeams = data.globalTeams || {};
+
+                html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
+                            <h4 style="color:#fbbf24; margin-bottom:8px;">📋 한 팀당 문제 수</h4>
+                            <select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('charCount', Number(this.value))">
+                                ${[3,5,7,10].map(v => `<option value="${v}" ${charCount===v?'selected':''}>${v}문제</option>`).join('')}
+                            </select>
+                            <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
+                                A팀이 ${charCount}문제를 다 끝내면 B팀 차례로 넘어갑니다.
+                                B팀은 A팀과 <b>같은 카테고리</b>를 순서대로 받고, 같은 단어는 나오지 않습니다.
+                            </p>
+                         </div>`;
 
                 html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
                             <h4 style="color:#fbbf24; margin-bottom:8px;">🎭 출제자</h4>
                             <div class="bz-modes" style="margin-bottom:6px;">
-                                <button class="bz-mode${descMode==='rotate'?' on':''}" onclick="window.setCharOption('charDescMode','rotate')">🔄 한 명씩 돌아가며</button>
                                 <button class="bz-mode${descMode==='fixed'?' on':''}" onclick="window.setCharOption('charDescMode','fixed')">📌 한 명 고정</button>
+                                <button class="bz-mode${descMode==='rotate'?' on':''}" onclick="window.setCharOption('charDescMode','rotate')">🔄 한 명씩 돌아가며</button>
                             </div>
                             <p style="color:#64748b; font-size:0.78rem; line-height:1.5;">
                                 출제자에게만 제시어가 보입니다.
@@ -202,9 +226,6 @@ window.updateQuiz = function(data) {
                                 <button class="bz-mode${scope==='team'?' on':''}" onclick="window.setCharOption('charAnswerScope','team')">차례인 팀만</button>
                                 <button class="bz-mode${scope==='all'?' on':''}" onclick="window.setCharOption('charAnswerScope','all')">전원 아무나</button>
                             </div>
-                            <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
-                                A팀 차례에 나온 카테고리가 B팀 차례에도 그대로 나옵니다. 같은 단어는 나오지 않습니다.
-                            </p>
                          </div>`;
             }
 
@@ -290,8 +311,12 @@ window.updateQuiz = function(data) {
                 const tColor = turnTeam === 'A' ? '#60a5fa' : '#f87171';
                 const descName = (window.players[data.describer] || {}).name || '?';
 
+                const total = data.charCount || 5;
+                const nth = (typeof data.charIdx === 'number' ? data.charIdx : 0) + 1;
+
                 html += `<div style="margin-bottom:10px; font-size:0.95rem;">
-                            <b style="color:${tColor};">${tName}</b> 차례 ·
+                            <b style="color:${tColor};">${tName}</b> 차례
+                            <span style="color:#94a3b8;">(${nth}/${total}문제)</span><br>
                             🎭 <b style="color:#facc15;">${descName}</b> 님이 설명합니다
                          </div>`;
 
@@ -408,7 +433,7 @@ window.updateQuiz = function(data) {
                 }
                 if (canControl && !data.buzzer_winner) {
                     html += `<div class="btn-row" style="margin-top:12px;">
-                                <button class="btn primary wide" onclick="window.startQuizGame()">${isCharades && turnTeam === 'A' ? '▶ 상대 팀 차례' : '▶ 다음 문제'}</button>
+                                <button class="btn primary wide" onclick="window.startQuizGame()">${charNextLabel(data, isCharades)}</button>
                                 <button class="btn secondary" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
@@ -516,26 +541,39 @@ window.startQuizGame = async function() {
     const buzzerEnabled = data.buzzer_enabled || false;
     const winPoints = data.win_points || 1;
     
-    // === 몸으로 말해요: A팀 → B팀 차례. 같은 카테고리를 두 팀이 나눠 쓴다 ===
-    let charTeam = null, charCat = null;
+    // === 몸으로 말해요 ===
+    // A팀이 정해진 문제 수를 전부 끝내면 B팀 차례.
+    // B팀은 A팀이 받았던 카테고리를 순서대로 그대로 받는다 (단어는 다르다).
+    let charTeam = null, charCat = null, charIdx = 0, charCats = null;
     if (mode === 'charades') {
-        const prevTeam = data.charTeam;
+        const total = data.charCount || 5;
         const wasCharades = data.gameMode === 'charades' && data.quizState === 'playing';
+        const prevTeam = data.charTeam;
+        const prevIdx = (typeof data.charIdx === 'number') ? data.charIdx : -1;
+        charCats = Array.isArray(data.charCats) ? data.charCats.slice() : [];
 
-        if (wasCharades && prevTeam === 'A' && data.charCat) {
-            // A팀이 막 끝났다 → 같은 카테고리로 B팀 차례
-            charTeam = 'B';
-            charCat = data.charCat;
+        if (!wasCharades) {
+            charTeam = 'A'; charIdx = 0; charCats = [];      // 새 판
+        } else if (prevIdx + 1 < total) {
+            charTeam = prevTeam || 'A'; charIdx = prevIdx + 1; // 같은 팀 계속
+        } else if (prevTeam === 'A') {
+            charTeam = 'B'; charIdx = 0;                       // A팀 끝 → B팀
         } else {
-            // 새 라운드 → 카테고리를 새로 뽑고 A팀부터
-            charTeam = 'A';
-            if (cat !== '랜덤' && window.QUIZ_DB.charades[cat]) {
-                charCat = cat; // 방장이 특정 카테고리를 골랐으면 계속 그것으로
-            } else {
-                const real = Object.keys(window.QUIZ_DB.charades).filter(c => c !== '랜덤');
-                charCat = real[Math.floor(Math.random() * real.length)];
-            }
+            charTeam = 'A'; charIdx = 0; charCats = [];        // 한 판 끝 → 새 판
         }
+
+        if (charTeam === 'B' && charCats[charIdx]) {
+            charCat = charCats[charIdx];   // A팀이 썼던 카테고리 그대로
+        } else if (cat !== '랜덤' && window.QUIZ_DB.charades[cat]) {
+            charCat = cat;                 // 방장이 카테고리를 지정한 경우
+        } else {
+            // 한 판 안에서는 되도록 겹치지 않게 뽑는다
+            const real = Object.keys(window.QUIZ_DB.charades).filter(c => c !== '랜덤');
+            const fresh = real.filter(c => charCats.indexOf(c) === -1);
+            const pool = fresh.length ? fresh : real;
+            charCat = pool[Math.floor(Math.random() * pool.length)];
+        }
+        if (charTeam === 'A') charCats[charIdx] = charCat;
         cat = charCat;
     }
 
@@ -575,7 +613,7 @@ window.startQuizGame = async function() {
             .filter(id => (gTeams[id] || 'A') === charTeam)
             .sort((a, b) => ((window.players[a] || {}).joinedAt || 0) - ((window.players[b] || {}).joinedAt || 0));
 
-        if ((data.charDescMode || 'rotate') === 'fixed') {
+        if ((data.charDescMode || 'fixed') === 'fixed') {
             const picked = data['charDesc' + charTeam];
             desc = (picked && window.players[picked]) ? picked : (teamMembers[0] || null);
         } else {
@@ -596,6 +634,7 @@ window.startQuizGame = async function() {
         img: qData.img || null, hints: qData.hints || null,
         describer: desc || null, winner: null,
         charTeam: charTeam, charCat: charCat, charRot: charRot,
+        charIdx: charIdx, charCats: charCats,
         usedQuestions: usedQuestions,
         buzzer_countdown: useBuzzer ? 3 : 0,
         buzzer_active: !useBuzzer && !isWords4,
