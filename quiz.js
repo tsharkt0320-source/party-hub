@@ -35,6 +35,37 @@ function charNextLabel(data, isCharades) {
     return isA ? '▶ ' + (data.teamBName || 'B팀') + ' 차례 시작' : '🔄 새 판 시작';
 }
 
+// 힌트 상자 — 모두가 '힌트 하나 더 보기'를 누르면 하나씩 열린다.
+// 초성 퀴즈와 스무고개가 같이 쓴다.
+function hintBlockHtml(data) {
+    if (!data.hints || !data.hints.length) return '';
+    const revealed = data.hintsRevealed || 0;
+    const totalPlayers = Object.keys(window.players).length;
+    const votes = data.hintVotes || {};
+    const voteCount = Object.keys(votes).length;
+    const iVoted = !!votes[window.myPlayerId];
+
+    let html = '<div style="background:rgba(0,0,0,0.3); padding:14px; border-radius:8px; text-align:left; margin-top:12px;">';
+    data.hints.forEach((h, i) => {
+        html += (i < revealed)
+            ? `<div style="margin-bottom:8px; color:#cbd5e1; animation: fadeIn 0.5s;">💡 힌트 ${i+1}: <b>${h}</b></div>`
+            : `<div style="margin-bottom:8px; color:#4b5563;">🔒 힌트 ${i+1}: ???</div>`;
+    });
+    html += '</div>';
+
+    if (revealed < data.hints.length && !data.winner) {
+        html += `<div style="margin-top:10px; text-align:center;">
+                    <button class="btn ${iVoted?'secondary':'primary'}" style="padding:10px 20px;" onclick="window.voteHint()" ${iVoted?'disabled':''}>
+                        ${iVoted ? '✓ 눌렀습니다' : '💡 힌트 하나 더 보기'}
+                    </button>
+                    <div style="color:var(--text-muted); font-size:0.8rem; margin-top:5px;">${voteCount}/${totalPlayers}명이 눌렀습니다</div>
+                 </div>`;
+    } else if (revealed >= data.hints.length) {
+        html += `<div style="color:var(--text-muted); font-size:0.8rem; margin-top:8px; text-align:center;">힌트를 모두 열었습니다</div>`;
+    }
+    return html;
+}
+
 window.updateQuiz = function(data) {
     const content = document.getElementById('quiz-content');
     let html = '';
@@ -94,7 +125,7 @@ window.updateQuiz = function(data) {
         
         let modeOptions = [
             { id: 'initial', name: '초성 퀴즈' },
-            { id: 'words4', name: '4글자 이어말하기 (육성만가능)' },
+            { id: 'words4', name: '이어말하기 (육성만가능)' },
             { id: 'charades', name: '몸으로 말해요' },
             { id: 'person_image', name: '인물 퀴즈 (사진)' },
             { id: 'person_text', name: '인물 퀴즈 (스무고개)' },
@@ -327,32 +358,7 @@ window.updateQuiz = function(data) {
             } 
             else if (mode === 'person_text') {
                 html += `<h3 style="margin-bottom:15px; line-height:1.5;">${data.question}</h3>`;
-                if (data.hints) {
-                    const revealedCount = data.hintsRevealed || 0;
-                    const totalPlayers = Object.keys(window.players).length;
-                    const hintVotes = data.hintVotes || {};
-                    const voteCount = Object.keys(hintVotes).length;
-                    const iVoted = !!hintVotes[window.myPlayerId];
-                    
-                    html += `<div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:8px; text-align:left;">`;
-                    data.hints.forEach((h, i) => {
-                        if (i < revealedCount) {
-                            html += `<div style="margin-bottom:8px; color:#cbd5e1; animation: fadeIn 0.5s;">💡 힌트 ${i+1}: <b>${h}</b></div>`;
-                        } else {
-                            html += `<div style="margin-bottom:8px; color:#4b5563;">🔒 힌트 ${i+1}: ???</div>`;
-                        }
-                    });
-                    html += `</div>`;
-                    
-                    if (revealedCount < data.hints.length && !data.winner) {
-                        html += `<div style="margin-top:10px; text-align:center;">
-                                    <button class="btn ${iVoted?'secondary':'primary'}" style="padding:10px 20px;" onclick="window.voteHint()" ${iVoted?'disabled':''}>
-                                        ${iVoted ? '✓ 투표 완료' : '💡 힌트 하나 더 보기'}
-                                    </button>
-                                    <div style="color:var(--text-muted); font-size:0.8rem; margin-top:5px;">${voteCount}/${totalPlayers}명 투표</div>
-                                 </div>`;
-                    }
-                }
+                html += hintBlockHtml(data);
             }
             else if (mode === 'proverb_meaning') {
                 html += `<h3 style="margin-bottom:15px; line-height:1.5; font-size:1.1rem;">${data.question}</h3>`;
@@ -406,10 +412,12 @@ window.updateQuiz = function(data) {
                 }
             }
             else if (isWords4) {
-                // 4글자 이어말하기 - show word + timer
-                html += `<div style="font-size: 3.5rem; font-weight: 900; color: var(--primary); letter-spacing: 5px; margin: 20px 0; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);">
-                            ${data.question}
-                        </div>`;
+                // 이어말하기 — 앞 글자를 보여주고, 남은 글자 수를 ○ 로 알려준다
+                const restLen = String(data.answer || '').length;
+                html += `<div style="font-size: 3rem; font-weight: 900; color: var(--primary); letter-spacing: 4px; margin: 18px 0; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);">
+                            ${data.question}<span style="color:#475569;">${'○'.repeat(restLen)}</span>
+                        </div>
+                        <div style="color:var(--text-muted); font-size:0.85rem; margin-bottom:8px;">뒤에 올 <b>${restLen}글자</b>를 이어 말하세요</div>`;
                 if (data.words4_failed) {
                     html += `<div style="font-size: 3rem; font-weight: 900; color: var(--danger); margin: 20px 0; animation: pulse 0.5s infinite;">
                                 ⏰ 실패!
@@ -426,6 +434,7 @@ window.updateQuiz = function(data) {
                 html += `<div style="font-size: 3.5rem; font-weight: 900; color: var(--primary); letter-spacing: 5px; margin: 20px 0; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);">
                             ${data.question}
                         </div>`;
+                html += hintBlockHtml(data);   // 초성이 어려울 때 힌트를 하나씩 연다
             }
             html += `</div>`;
         }
@@ -1052,12 +1061,15 @@ window.voteHint = async function() {
     let d = snap.val();
     let votes = d.hintVotes || {};
     votes[window.myPlayerId] = true;
-    let totalPlayers = Object.keys(d.players || {}).length;
-    let voteCount = Object.keys(votes).length;
-    
-    if (voteCount >= totalPlayers) {
-        // All voted - reveal next hint
-        let revealed = (d.hintsRevealed || 1) + 1;
+
+    // 봇은 누를 수 없으므로 사람 수만 센다 (안 그러면 힌트가 영영 안 열린다)
+    const humans = Object.keys(d.players || {}).filter(id => id.indexOf('bot_') !== 0);
+    const voteCount = Object.keys(votes).filter(id => id.indexOf('bot_') !== 0).length;
+
+    if (voteCount >= humans.length) {
+        // 모두 눌렀다 → 힌트 하나 공개
+        // (|| 1 로 잡으면 0에서 시작하는 초성 퀴즈가 1번 힌트를 건너뛴다)
+        const revealed = (d.hintsRevealed || 0) + 1;
         window.firebaseUpdate(roomRef, { hintVotes: {}, hintsRevealed: revealed });
     } else {
         window.firebaseUpdate(roomRef, { hintVotes: votes });
