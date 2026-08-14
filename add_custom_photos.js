@@ -14,22 +14,17 @@ try {
     process.exit(1);
 }
 
-const newCharacters = [
-    {q: "이 캐릭터는 누구일까요?", a: "세균맨", img: "images/baikinman.png"},
-    {q: "이 캐릭터는 누구일까요?", a: "카드캡터 체리", img: "images/cherry.png"},
-    {q: "이 캐릭터는 누구일까요?", a: "강백호", img: "images/kangbaekho.png"}
-];
-
 const newCelebrities = [
-    {q: "이 사람은 누구일까요?", a: "마이클 잭슨", img: "images/michael_jackson.png"},
-    {q: "이 사람은 누구일까요?", a: "마이클 조던", img: "images/michael_jordan.png"}
+    {q: "이 사람은 누구일까요?", a: "성룡", img: "images/jackie_chan.png"},
+    {q: "이 사람은 누구일까요?", a: "임원희", img: "images/im_won_hee.png"},
+    {q: "이 사람은 누구일까요?", a: "이재용", img: "images/lee_jae_yong.png"},
+    {q: "이 사람은 누구일까요?", a: "라미란", img: "images/ra_mi_ran.png"},
+    {q: "이 사람은 누구일까요?", a: "배성재", img: "images/bae_sung_jae.png"}
 ];
 
 if (!QUIZ_DB.person_image) QUIZ_DB.person_image = {};
-if (!QUIZ_DB.person_image['캐릭터 (사진)']) QUIZ_DB.person_image['캐릭터 (사진)'] = [];
 if (!QUIZ_DB.person_image['유명인 (사진)']) QUIZ_DB.person_image['유명인 (사진)'] = [];
 
-QUIZ_DB.person_image['캐릭터 (사진)'] = QUIZ_DB.person_image['캐릭터 (사진)'].concat(newCharacters);
 QUIZ_DB.person_image['유명인 (사진)'] = QUIZ_DB.person_image['유명인 (사진)'].concat(newCelebrities);
 
 // Format back to JS
