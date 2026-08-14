@@ -24,13 +24,15 @@ function getCategoriesForMode(mode) {
 // 몸으로 말해요에서 '다음' 버튼이 무엇을 하는지 이름으로 알려준다
 function charNextLabel(data, isCharades) {
     if (!isCharades) return '▶ 다음 문제';
+    const isA = (data.charTeam || 'A') === 'A';
+    if ((data.charMode || 'count') === 'time') {
+        if (!data.charTimeUp) return '▶ 다음 문제';
+        return isA ? '▶ ' + (data.teamBName || 'B팀') + ' 차례 시작' : '🔄 새 판 시작';
+    }
     const total = data.charCount || 5;
     const idx = (typeof data.charIdx === 'number') ? data.charIdx : 0;
     if (idx + 1 < total) return '▶ 다음 문제';
-    if ((data.charTeam || 'A') === 'A') {
-        return '▶ ' + (data.teamBName || 'B팀') + ' 차례 시작';
-    }
-    return '🔄 새 판 시작';
+    return isA ? '▶ ' + (data.teamBName || 'B팀') + ' 차례 시작' : '🔄 새 판 시작';
 }
 
 window.updateQuiz = function(data) {
@@ -145,8 +147,8 @@ window.updateQuiz = function(data) {
                         </div>
                      </div>`;
 
-            // Buzzer toggle (not for words4)
-            if (selectedMode !== 'words4') {
+            // 부저 설정 — 4글자 이어말하기와 몸으로 말해요는 부저를 쓰지 않는다
+            if (selectedMode !== 'words4' && selectedMode !== 'charades') {
                 html += `<div style="margin-bottom:15px; text-align:left;">
                             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                 <input type="checkbox" id="quiz-buzzer-toggle" ${buzzerEnabled?'checked':''} onchange="window.toggleBuzzer()">
@@ -164,6 +166,22 @@ window.updateQuiz = function(data) {
                                     <span style="color:#cbd5e1; font-size:0.85rem;">아무나 무제한</span>
                                 </label>
                              </div>`;
+
+                    // 부저는 소리쳐 답하는 방식이라, 정답 여부를 판정할 사람이 필요하다
+                    const judge = data.buzzerJudge || '';
+                    html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
+                                <h4 style="color:#fbbf24; margin-bottom:6px;">🎭 출제자 (정답 판정)</h4>
+                                <select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('buzzerJudge', this.value)">
+                                    <option value="">— 방장이 판정 —</option>
+                                    ${Object.keys(window.players).map(id => `<option value="${id}" ${judge===id?'selected':''}>${window.players[id].name}</option>`).join('')}
+                                </select>
+                                <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
+                                    출제자에게만 정답이 보입니다. 부저를 누른 사람이 소리쳐 답하면
+                                    출제자가 <b style="color:#94a3b8;">⭕ 정답</b> 또는 <b style="color:#94a3b8;">❌ 오답</b> 을 누릅니다.
+                                    오답이면 다른 사람이 다시 누를 수 있습니다.<br>
+                                    출제자는 부저를 누를 수 없습니다.
+                                </p>
+                             </div>`;
                 }
             }
             
@@ -180,20 +198,37 @@ window.updateQuiz = function(data) {
             // 몸으로 말해요 설정
             if (selectedMode === 'charades') {
                 const descMode = data.charDescMode || 'fixed';
-                const scope = data.charAnswerScope || 'team';
                 const charCount = data.charCount || 5;
                 const gTeams = data.globalTeams || {};
 
+                const charMode = data.charMode || 'count';
+                const charTime = data.charTime || 300;
+
                 html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
-                            <h4 style="color:#fbbf24; margin-bottom:8px;">📋 한 팀당 문제 수</h4>
-                            <select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('charCount', Number(this.value))">
-                                ${[3,5,7,10].map(v => `<option value="${v}" ${charCount===v?'selected':''}>${v}문제</option>`).join('')}
-                            </select>
-                            <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
+                            <h4 style="color:#fbbf24; margin-bottom:8px;">📋 진행 방식</h4>
+                            <div class="bz-modes" style="margin-bottom:8px;">
+                                <button class="bz-mode${charMode==='count'?' on':''}" onclick="window.setCharOption('charMode','count')">📋 문제 수</button>
+                                <button class="bz-mode${charMode==='time'?' on':''}" onclick="window.setCharOption('charMode','time')">⏱ 시간 제한</button>
+                            </div>`;
+
+                if (charMode === 'count') {
+                    html += `<select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('charCount', Number(this.value))">
+                                ${[3,5,7,10].map(v => `<option value="${v}" ${charCount===v?'selected':''}>한 팀당 ${v}문제</option>`).join('')}
+                             </select>
+                             <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
                                 A팀이 ${charCount}문제를 다 끝내면 B팀 차례로 넘어갑니다.
                                 B팀은 A팀과 <b>같은 카테고리</b>를 순서대로 받고, 같은 단어는 나오지 않습니다.
-                            </p>
-                         </div>`;
+                             </p>`;
+                } else {
+                    html += `<select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('charTime', Number(this.value))">
+                                ${[180,300,420].map(v => `<option value="${v}" ${charTime===v?'selected':''}>${v/60}분</option>`).join('')}
+                             </select>
+                             <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
+                                ${charTime/60}분 동안 계속 문제를 풉니다. 맞힌 개수만큼 점수가 오릅니다.<br>
+                                두 팀이 <b>같은 카테고리 하나</b>로만 진행합니다.
+                             </p>`;
+                }
+                html += `</div>`;
 
                 html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
                             <h4 style="color:#fbbf24; margin-bottom:8px;">🎭 출제자</h4>
@@ -220,13 +255,11 @@ window.updateQuiz = function(data) {
                 }
                 html += `</div>`;
 
-                html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
-                            <h4 style="color:#fbbf24; margin-bottom:8px;">🚨 부저를 누를 수 있는 사람</h4>
-                            <div class="bz-modes">
-                                <button class="bz-mode${scope==='team'?' on':''}" onclick="window.setCharOption('charAnswerScope','team')">차례인 팀만</button>
-                                <button class="bz-mode${scope==='all'?' on':''}" onclick="window.setCharOption('charAnswerScope','all')">전원 아무나</button>
-                            </div>
-                         </div>`;
+                html += `<p style="color:#64748b; font-size:0.78rem; margin-bottom:15px; line-height:1.5; text-align:left;">
+                            부저는 쓰지 않습니다. 팀원이 소리쳐 맞히면 출제자가
+                            <b style="color:#94a3b8;">⭕ 정답! 다음 문제</b> 또는 <b style="color:#94a3b8;">⏭ PASS</b> 를 누릅니다.<br>
+                            상대 팀 화면에는 제시어가 보입니다.
+                         </p>`;
             }
 
             html += `<button id="btn-start-quiz" class="btn primary" style="width:100%; font-size:1.2rem; padding:16px;" onclick="window.startQuizGame()">🚀 문제 출제하기</button>
@@ -310,21 +343,38 @@ window.updateQuiz = function(data) {
                 const tName = turnTeam === 'A' ? (data.teamAName || 'A팀') : (data.teamBName || 'B팀');
                 const tColor = turnTeam === 'A' ? '#60a5fa' : '#f87171';
                 const descName = (window.players[data.describer] || {}).name || '?';
-
-                const total = data.charCount || 5;
-                const nth = (typeof data.charIdx === 'number' ? data.charIdx : 0) + 1;
+                const byTime = (data.charMode || 'count') === 'time';
+                const solved = (data.charSolved || {})[turnTeam] || 0;
+                const timeUp = !!data.charTimeUp;
+                // 우리 팀 차례가 아니면 구경하는 쪽 — 정답을 보여준다
+                const amWatching = myTeam !== turnTeam;
 
                 html += `<div style="margin-bottom:10px; font-size:0.95rem;">
                             <b style="color:${tColor};">${tName}</b> 차례
-                            <span style="color:#94a3b8;">(${nth}/${total}문제)</span><br>
+                            <span style="color:#94a3b8;">${byTime
+                                ? `(맞힌 문제 ${solved}개)`
+                                : `(${(typeof data.charIdx === 'number' ? data.charIdx : 0) + 1}/${data.charCount || 5}문제)`}</span><br>
                             🎭 <b style="color:#facc15;">${descName}</b> 님이 설명합니다
                          </div>`;
 
-                if (amIDescriber) {
+                if (byTime) {
+                    html += `<div id="char-timer" style="font-size:2.2rem; font-weight:900; color:#fbbf24; margin:6px 0;">
+                                ${timeUp ? '⏰ 시간 종료' : '⏱ --:--'}
+                             </div>`;
+                }
+
+                if (timeUp) {
+                    html += `<div style="font-size:1.1rem; color:#cbd5e1; margin:12px 0;">
+                                ${tName}은 <b style="color:#4ade80;">${solved}개</b>를 맞혔습니다
+                             </div>`;
+                } else if (amIDescriber) {
                     html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#fbbf24;">몸으로 설명하세요!</div>
                              <div style="font-size: 2.6rem; font-weight: 900; color: var(--danger); margin: 12px 0;">${data.answer}</div>`;
+                } else if (amWatching) {
+                    html += `<div style="font-size: 0.95rem; margin-bottom:6px; color:#94a3b8;">👀 구경 중 — 상대 팀 제시어</div>
+                             <div style="font-size: 2.2rem; font-weight: 900; color: #cbd5e1; margin: 12px 0;">${data.answer}</div>`;
                 } else {
-                    html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#22c55e;">설명을 보고 맞혀보세요!</div>
+                    html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#22c55e;">설명을 보고 소리쳐 맞혀보세요!</div>
                              <div style="font-size: 2.6rem; font-weight: 900; color: #94a3b8; margin: 12px 0;">???</div>`;
                 }
             }
@@ -388,29 +438,70 @@ window.updateQuiz = function(data) {
                              </div>`;
                 }
             }
-            else if (buzzerEnabled || isCharades) {
-                // === 부저 — '부저만 사용'과 같은 화면(팀 상자 + 이름 앞 램프) ===
-                const answerScope = data.charAnswerScope || 'team';
-                const turnTeam = isCharades ? (data.charTeam || 'A') : null;
+            else if (isCharades) {
+                // === 몸으로 말해요 — 부저 없이 육성으로 맞히고 출제자가 판정한다 ===
+                const turnTeam = data.charTeam || 'A';
+                const byTime = (data.charMode || 'count') === 'time';
+                const timeUp = !!data.charTimeUp;
 
-                // 내가 누를 수 있는지
+                if (typeof window.bzTeamBoxesHtml === 'function') {
+                    html += window.bzTeamBoxesHtml(data, {
+                        showScore: false, showAdjust: false,
+                        activeTeam: turnTeam,
+                        describers: data.describer ? { [data.describer]: true } : {}
+                    });
+                }
+
+                if (amIDescriber && !timeUp) {
+                    html += `<div class="btn-row" style="margin-top:14px;">
+                                <button class="btn primary wide" style="padding:18px 8px; font-size:1.05rem;" onclick="window.charCorrect()">⭕ 정답! 다음 문제</button>
+                                <button class="btn secondary" style="padding:18px 8px; font-size:1.05rem; background:#4b5563;" onclick="window.charPass()">⏭ PASS</button>
+                             </div>
+                             <p style="color:#64748b; font-size:0.78rem; margin-top:8px;">정답을 누르면 ${turnTeam === 'A' ? (data.teamAName || 'A팀') : (data.teamBName || 'B팀')} 점수가 오릅니다</p>`;
+                } else if (!timeUp) {
+                    html += `<div class="card" style="text-align:center; margin-top:14px; padding:14px;">
+                                <span style="color:#94a3b8; font-size:0.9rem;">🎭 출제자가 정답 여부를 눌러 줍니다</span>
+                             </div>`;
+                }
+
+                if (canControl) {
+                    if (byTime && !timeUp) {
+                        html += `<div class="btn-row" style="margin-top:12px;">
+                                    <button class="btn secondary wide" onclick="window.charStopTime()">⏹ 시간 끝내기</button>
+                                    <button class="btn secondary" onclick="window.backToQuizLobby()">⚙️ 설정</button>
+                                 </div>`;
+                    } else if (!byTime || timeUp) {
+                        html += `<div class="btn-row" style="margin-top:12px;">
+                                    <button class="btn primary wide" onclick="window.startQuizGame()">${charNextLabel(data, true)}</button>
+                                    <button class="btn secondary" onclick="window.backToQuizLobby()">⚙️ 설정</button>
+                                 </div>`;
+                    }
+                }
+            }
+            else if (buzzerEnabled) {
+                // === 부저 — '부저만 사용'과 같은 화면(팀 상자 + 이름 앞 램프) ===
+                const judge = data.buzzerJudge && window.players[data.buzzerJudge] ? data.buzzerJudge : null;
+                const amJudge = judge === window.myPlayerId;
+
                 let canPress = true, note = '대기 중';
-                if (amIDescriber) { canPress = false; note = '🎭 출제자는 못 누릅니다'; }
-                else if (isCharades && answerScope === 'team' && myTeam !== turnTeam) {
+                if (amJudge) { canPress = false; note = '🎭 출제자는 못 누릅니다'; }
+                else if (data.buzzer_mode === 'A' && data.last_buzzer_team === myTeam) {
                     canPress = false;
                     note = '상대 팀 차례입니다';
-                } else if (!isCharades && data.buzzer_mode === 'A' && data.last_buzzer_team === myTeam) {
-                    canPress = false;
-                    note = '상대 팀 차례입니다';
+                }
+
+                if (amJudge && !data.winner) {
+                    html += `<div class="card" style="text-align:center; padding:12px; margin-bottom:10px; background:rgba(251,191,36,0.12); border:1px solid #fbbf24;">
+                                <div style="color:#fbbf24; font-size:0.85rem;">🎭 출제자만 보는 정답</div>
+                                <div style="font-size:1.6rem; font-weight:900; color:#fff;">${Array.isArray(data.answer) ? data.answer[0] : data.answer}</div>
+                             </div>`;
                 }
 
                 if (typeof window.bzTeamBoxesHtml === 'function') {
                     html += window.bzTeamBoxesHtml(data, {
                         winner: data.buzzer_winner || null,
-                        showScore: false,
-                        showAdjust: false,
-                        activeTeam: (isCharades && answerScope === 'team') ? turnTeam : null,
-                        describers: data.describer ? { [data.describer]: true } : {}
+                        showScore: false, showAdjust: false,
+                        describers: judge ? { [judge]: true } : {}
                     });
                 }
 
@@ -425,15 +516,20 @@ window.updateQuiz = function(data) {
                     });
                 }
 
-                if (data.buzzer_winner && canControl) {
+                // 판정은 출제자가 (지정 안 했으면 방장/팀장이)
+                if (data.buzzer_winner && (judge ? amJudge : canControl)) {
                     html += `<div class="btn-row" style="margin-top:12px;">
                                 <button class="btn primary" onclick="window.hostBuzzerCorrect('${data.buzzer_winner}')">⭕ 정답</button>
-                                <button class="btn danger" onclick="window.hostBuzzerWrong()">❌ 오답</button>
+                                <button class="btn danger" onclick="window.hostBuzzerWrong()">❌ 오답 (다음 사람에게)</button>
                              </div>`;
+                } else if (data.buzzer_winner && judge) {
+                    html += `<p style="text-align:center; color:#94a3b8; font-size:0.85rem; margin-top:10px;">
+                                🎭 ${window.players[judge].name} 님의 판정을 기다리는 중...
+                             </p>`;
                 }
                 if (canControl && !data.buzzer_winner) {
                     html += `<div class="btn-row" style="margin-top:12px;">
-                                <button class="btn primary wide" onclick="window.startQuizGame()">${charNextLabel(data, isCharades)}</button>
+                                <button class="btn primary wide" onclick="window.startQuizGame()">▶ 다음 문제</button>
                                 <button class="btn secondary" onclick="window.backToQuizLobby()" title="설정으로 돌아가기">⚙️ 설정</button>
                              </div>`;
                 }
@@ -456,6 +552,7 @@ window.updateQuiz = function(data) {
     }
 
     content.innerHTML = html;
+    syncCharTimer(data);
 };
 
 // === SETUP ACTIONS ===
@@ -501,6 +598,66 @@ window.setQuizTeam = function(pId, teamId) {
     window.firebaseUpdate(window.firebaseChild(window.firebaseRef(window.db, 'rooms/' + window.myRoom), 'globalTeams'), { [pId]: teamId });
 };
 
+// === 몸으로 말해요 — 출제자가 직접 판정 ===
+
+// ⭕ 정답! → 그 팀 점수를 올리고 다음 문제로
+window.charCorrect = async function() {
+    const d = window._lastRoomData || {};
+    if (d.gameMode !== 'charades' || d.describer !== window.myPlayerId) return;
+    if (d.charTimeUp) return;
+
+    const team = d.charTeam || 'A';
+    const pts = d.win_points || 1;
+    const bonus = Object.assign({}, d.teamBonus || {});
+    bonus[team] = (Number(bonus[team]) || 0) + pts;
+    const solved = Object.assign({}, d.charSolved || {});
+    solved[team] = (solved[team] || 0) + 1;
+
+    await window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
+        teamBonus: bonus, charSolved: solved
+    });
+    window.startQuizGame();
+};
+
+// ⏭ PASS → 점수 없이 다음 문제로
+window.charPass = function() {
+    const d = window._lastRoomData || {};
+    if (d.gameMode !== 'charades' || d.describer !== window.myPlayerId) return;
+    if (d.charTimeUp) return;
+    window.startQuizGame();
+};
+
+window.charStopTime = function() {
+    if (!window.isHost && !window._isCaptain) return;
+    window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { charTimeUp: true });
+};
+
+// 남은 시간은 각자 화면에서 센다 (1초마다 방 전체를 다시 그리지 않기 위해)
+function syncCharTimer(data) {
+    const el = document.getElementById('char-timer');
+    const endAt = data.charEndAt;
+    if (window._charTickIv) { clearInterval(window._charTickIv); window._charTickIv = null; }
+    if (!el || !endAt || data.charTimeUp) return;
+
+    const paint = () => {
+        const left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+        const box = document.getElementById('char-timer');
+        if (!box) { clearInterval(window._charTickIv); window._charTickIv = null; return; }
+        const m = Math.floor(left / 60), s = left % 60;
+        box.innerText = '⏱ ' + m + ':' + String(s).padStart(2, '0');
+        box.style.color = left <= 10 ? '#ef4444' : '#fbbf24';
+        if (left <= 0) {
+            clearInterval(window._charTickIv); window._charTickIv = null;
+            // 시간이 끝났다는 사실은 한 사람만 기록한다
+            if (window.isHost) {
+                window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { charTimeUp: true });
+            }
+        }
+    };
+    paint();
+    window._charTickIv = setInterval(paint, 250);
+}
+
 window.setCharOption = function(key, val) {
     if (!window.isHost) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), { [key]: val || null });
@@ -545,24 +702,51 @@ window.startQuizGame = async function() {
     // A팀이 정해진 문제 수를 전부 끝내면 B팀 차례.
     // B팀은 A팀이 받았던 카테고리를 순서대로 그대로 받는다 (단어는 다르다).
     let charTeam = null, charCat = null, charIdx = 0, charCats = null;
+    let charNewTurn = false, charSolved = data.charSolved || {};
     if (mode === 'charades') {
+        const byTime = (data.charMode || 'count') === 'time';
         const total = data.charCount || 5;
         const wasCharades = data.gameMode === 'charades' && data.quizState === 'playing';
         const prevTeam = data.charTeam;
         const prevIdx = (typeof data.charIdx === 'number') ? data.charIdx : -1;
         charCats = Array.isArray(data.charCats) ? data.charCats.slice() : [];
 
-        if (!wasCharades) {
-            charTeam = 'A'; charIdx = 0; charCats = [];      // 새 판
-        } else if (prevIdx + 1 < total) {
-            charTeam = prevTeam || 'A'; charIdx = prevIdx + 1; // 같은 팀 계속
-        } else if (prevTeam === 'A') {
-            charTeam = 'B'; charIdx = 0;                       // A팀 끝 → B팀
+        if (byTime) {
+            // 시간 제한 — 시간이 끝났을 때만 팀이 넘어간다
+            if (!wasCharades) {
+                charTeam = 'A'; charNewTurn = true; charCats = []; charSolved = {};
+            } else if (!data.charTimeUp) {
+                charTeam = prevTeam || 'A';           // 시간 안 — 같은 팀 계속
+            } else if (prevTeam === 'A') {
+                charTeam = 'B'; charNewTurn = true;   // A팀 시간 끝 → B팀
+            } else {
+                charTeam = 'A'; charNewTurn = true; charCats = []; charSolved = {}; // 새 판
+            }
+            charIdx = charNewTurn ? 0 : (prevIdx + 1);
         } else {
-            charTeam = 'A'; charIdx = 0; charCats = [];        // 한 판 끝 → 새 판
+            if (!wasCharades) {
+                charTeam = 'A'; charIdx = 0; charCats = []; charSolved = {};
+            } else if (prevIdx + 1 < total) {
+                charTeam = prevTeam || 'A'; charIdx = prevIdx + 1;
+            } else if (prevTeam === 'A') {
+                charTeam = 'B'; charIdx = 0;
+            } else {
+                charTeam = 'A'; charIdx = 0; charCats = []; charSolved = {};
+            }
         }
 
-        if (charTeam === 'B' && charCats[charIdx]) {
+        if (byTime) {
+            // 두 팀이 같은 카테고리 하나로만 진행한다
+            if (charCats[0]) {
+                charCat = charCats[0];
+            } else if (cat !== '랜덤' && window.QUIZ_DB.charades[cat]) {
+                charCat = cat;
+            } else {
+                const real = Object.keys(window.QUIZ_DB.charades).filter(c => c !== '랜덤');
+                charCat = real[Math.floor(Math.random() * real.length)];
+            }
+            charCats[0] = charCat;
+        } else if (charTeam === 'B' && charCats[charIdx]) {
             charCat = charCats[charIdx];   // A팀이 썼던 카테고리 그대로
         } else if (cat !== '랜덤' && window.QUIZ_DB.charades[cat]) {
             charCat = cat;                 // 방장이 카테고리를 지정한 경우
@@ -572,8 +756,8 @@ window.startQuizGame = async function() {
             const fresh = real.filter(c => charCats.indexOf(c) === -1);
             const pool = fresh.length ? fresh : real;
             charCat = pool[Math.floor(Math.random() * pool.length)];
+            if (charTeam === 'A') charCats[charIdx] = charCat;
         }
-        if (charTeam === 'A') charCats[charIdx] = charCat;
         cat = charCat;
     }
 
@@ -624,7 +808,8 @@ window.startQuizGame = async function() {
         }
     }
 
-    const useBuzzer = buzzerEnabled || mode === 'charades';
+    // 몸으로 말해요는 부저를 쓰지 않는다 — 육성으로 맞히고 출제자가 판정한다
+    const useBuzzer = buzzerEnabled && mode !== 'charades';
     const isWords4 = mode === 'words4';
     const timerSec = data.timer_seconds || 3;
     
@@ -634,7 +819,7 @@ window.startQuizGame = async function() {
         img: qData.img || null, hints: qData.hints || null,
         describer: desc || null, winner: null,
         charTeam: charTeam, charCat: charCat, charRot: charRot,
-        charIdx: charIdx, charCats: charCats,
+        charIdx: charIdx, charCats: charCats, charSolved: charSolved,
         usedQuestions: usedQuestions,
         buzzer_countdown: useBuzzer ? 3 : 0,
         buzzer_active: !useBuzzer && !isWords4,
@@ -647,6 +832,20 @@ window.startQuizGame = async function() {
         win_points: winPoints
     };
     
+    // 시간 제한 — 새 차례가 시작될 때만 시계를 다시 맞춘다
+    if (mode === 'charades' && (data.charMode || 'count') === 'time') {
+        if (charNewTurn) {
+            updateObj.charEndAt = Date.now() + (data.charTime || 300) * 1000;
+            updateObj.charTimeUp = false;
+        } else {
+            updateObj.charEndAt = data.charEndAt || (Date.now() + (data.charTime || 300) * 1000);
+            updateObj.charTimeUp = false;
+        }
+    } else if (mode === 'charades') {
+        updateObj.charEndAt = null;
+        updateObj.charTimeUp = false;
+    }
+
     window.firebaseUpdate(roomRef, updateObj);
 
     if (useBuzzer) {
@@ -758,14 +957,9 @@ window.pressBuzzer = async function() {
     let d = snap.val();
     if (!d.buzzer_active || d.buzzer_winner) return;
 
-    const isCharades = d.gameMode === 'charades';
     const myTeam = (d.globalTeams && d.globalTeams[window.myPlayerId]) || 'A';
-    if (isCharades) {
-        if (d.describer === window.myPlayerId) return;            // 출제자는 못 누른다
-        if ((d.charAnswerScope || 'team') === 'team' && myTeam !== (d.charTeam || 'A')) return;
-    } else if (d.buzzer_mode === 'A' && d.last_buzzer_team === myTeam) {
-        return;
-    }
+    if (d.buzzerJudge === window.myPlayerId) return;   // 출제자는 못 누른다
+    if (d.buzzer_mode === 'A' && d.last_buzzer_team === myTeam) return;
 
     window.firebaseUpdate(roomRef, { buzzer_winner: window.myPlayerId, buzzer_active: false });
 };
