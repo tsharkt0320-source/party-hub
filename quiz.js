@@ -225,8 +225,27 @@ window.updateQuiz = function(data) {
                              </select>
                              <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
                                 ${charTime/60}분 동안 계속 문제를 풉니다. 맞힌 개수만큼 점수가 오릅니다.<br>
-                                두 팀이 <b>같은 카테고리 하나</b>로만 진행합니다.
+                                두 팀이 <b>같은 카테고리 하나</b>를 절반씩 나눠 갖습니다.
+                                같은 제시어는 <b>절대 두 팀에 겹치지 않습니다</b>.
                              </p>`;
+
+                    // 카테고리가 작으면 시간이 남아도 문제가 먼저 떨어진다 — 미리 알려준다
+                    const catInfo = Object.keys(window.QUIZ_DB.charades)
+                        .filter(c => c !== '랜덤')
+                        .map(c => ({ name: c, half: Math.floor(window.QUIZ_DB.charades[c].length / 2) }));
+                    const pickedCat = selectedCat !== '랜덤' && window.QUIZ_DB.charades[selectedCat] ? selectedCat : null;
+                    if (pickedCat) {
+                        const half = Math.floor(window.QUIZ_DB.charades[pickedCat].length / 2);
+                        html += `<p style="color:${half < 8 ? '#fbbf24' : '#64748b'}; font-size:0.78rem; margin-top:4px;">
+                                    「${pickedCat}」 → 한 팀당 <b>${half}문제</b>${half < 8 ? ' — 시간보다 문제가 먼저 떨어질 수 있습니다' : ''}
+                                 </p>`;
+                    } else {
+                        const biggest = catInfo.slice().sort((a,b) => b.half - a.half)[0];
+                        html += `<p style="color:#64748b; font-size:0.78rem; margin-top:4px;">
+                                    카테고리를 정하면 한 팀당 몇 문제인지 알려드립니다.
+                                    가장 많은 「${biggest.name}」는 한 팀당 ${biggest.half}문제입니다.
+                                 </p>`;
+                    }
                 }
                 html += `</div>`;
 
@@ -366,7 +385,15 @@ window.updateQuiz = function(data) {
                 if (timeUp) {
                     html += `<div style="font-size:1.1rem; color:#cbd5e1; margin:12px 0;">
                                 ${tName}은 <b style="color:#4ade80;">${solved}개</b>를 맞혔습니다
+                                ${data.charOutOfWords ? '<br><span style="color:#fbbf24; font-size:0.85rem;">이 카테고리에 배정된 문제를 다 썼습니다</span>' : ''}
                              </div>`;
+                } else if (amIDescriber && byTime) {
+                    const pool = (data.charPools || {})[turnTeam];
+                    const left = Array.isArray(pool) ? pool.length : 0;
+                    html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#fbbf24;">
+                                몸으로 설명하세요! <span style="color:#64748b; font-size:0.8rem;">(남은 문제 ${left}개)</span>
+                             </div>
+                             <div style="font-size: 2.6rem; font-weight: 900; color: var(--danger); margin: 12px 0;">${data.answer}</div>`;
                 } else if (amIDescriber) {
                     html += `<div style="font-size: 1.05rem; margin-bottom:6px; color:#fbbf24;">몸으로 설명하세요!</div>
                              <div style="font-size: 2.6rem; font-weight: 900; color: var(--danger); margin: 12px 0;">${data.answer}</div>`;
@@ -702,7 +729,7 @@ window.startQuizGame = async function() {
     // A팀이 정해진 문제 수를 전부 끝내면 B팀 차례.
     // B팀은 A팀이 받았던 카테고리를 순서대로 그대로 받는다 (단어는 다르다).
     let charTeam = null, charCat = null, charIdx = 0, charCats = null;
-    let charNewTurn = false, charSolved = data.charSolved || {};
+    let charNewTurn = false, charNewMatch = false, charSolved = data.charSolved || {};
     if (mode === 'charades') {
         const byTime = (data.charMode || 'count') === 'time';
         const total = data.charCount || 5;
@@ -714,13 +741,13 @@ window.startQuizGame = async function() {
         if (byTime) {
             // 시간 제한 — 시간이 끝났을 때만 팀이 넘어간다
             if (!wasCharades) {
-                charTeam = 'A'; charNewTurn = true; charCats = []; charSolved = {};
+                charTeam = 'A'; charNewTurn = charNewMatch = true; charCats = []; charSolved = {};
             } else if (!data.charTimeUp) {
                 charTeam = prevTeam || 'A';           // 시간 안 — 같은 팀 계속
             } else if (prevTeam === 'A') {
                 charTeam = 'B'; charNewTurn = true;   // A팀 시간 끝 → B팀
             } else {
-                charTeam = 'A'; charNewTurn = true; charCats = []; charSolved = {}; // 새 판
+                charTeam = 'A'; charNewTurn = charNewMatch = true; charCats = []; charSolved = {}; // 새 판
             }
             charIdx = charNewTurn ? 0 : (prevIdx + 1);
         } else {
@@ -771,11 +798,43 @@ window.startQuizGame = async function() {
     const qKey = (q) => mode + '|' + (q.a || q.q);
 
     const usedQuestions = data.usedQuestions || [];
-    const available = questions.filter(q => !usedQuestions.includes(qKey(q)));
-    if (available.length === 0) { alert("이 카테고리의 모든 문제가 출제되었습니다. 문제를 초기화해주세요."); return; }
 
-    const qData = available[Math.floor(Math.random() * available.length)];
-    usedQuestions.push(qKey(qData));
+    let qData = null;
+    let charPools = null;
+
+    if (mode === 'charades' && (data.charMode || 'count') === 'time') {
+        // 시간 제한은 두 팀이 한 카테고리를 나눠 쓴다.
+        // 판이 시작될 때 문제를 섞어 반씩 갈라 두면
+        //  ① 두 팀에게 같은 문제가 나올 수 없고
+        //  ② 앞 팀이 문제를 다 써버려 뒤 팀이 굶는 일도 없다.
+        charPools = data.charPools;
+        // built 표시로 판단한다. 파이어베이스는 빈 배열을 아예 지워버려서
+        // charPools.A 가 있는지로 보면, 한 팀이 문제를 다 쓴 순간 새로 만들어져 버린다.
+        if (charNewMatch || !charPools || !charPools.built) {
+            const idxs = questions.map((_, i) => i);
+            for (let i = idxs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const t = idxs[i]; idxs[i] = idxs[j]; idxs[j] = t;
+            }
+            const half = Math.floor(idxs.length / 2);
+            charPools = { built: true, A: idxs.slice(0, half), B: idxs.slice(half, half * 2) };
+        }
+
+        const myPool = Array.isArray(charPools[charTeam]) ? charPools[charTeam].slice() : [];
+        if (myPool.length === 0) {
+            // 배정받은 문제를 다 썼다 → 이 팀의 차례를 여기서 끝낸다
+            window.firebaseUpdate(roomRef, { charTimeUp: true, charOutOfWords: true });
+            return;
+        }
+        qData = questions[myPool.shift()];
+        charPools = Object.assign({}, charPools, { built: true, [charTeam]: myPool });
+        usedQuestions.push(qKey(qData));
+    } else {
+        const available = questions.filter(q => !usedQuestions.includes(qKey(q)));
+        if (available.length === 0) { alert("이 카테고리의 모든 문제가 출제되었습니다. 문제를 초기화해주세요."); return; }
+        qData = available[Math.floor(Math.random() * available.length)];
+        usedQuestions.push(qKey(qData));
+    }
 
     // '랜덤'으로 뽑았어도 화면에는 실제 카테고리를 보여준다.
     // 초성 퀴즈에서 카테고리는 사실상 유일한 단서라, '랜덤'이라고만 쓰면 맞힐 수가 없다.
@@ -820,6 +879,7 @@ window.startQuizGame = async function() {
         describer: desc || null, winner: null,
         charTeam: charTeam, charCat: charCat, charRot: charRot,
         charIdx: charIdx, charCats: charCats, charSolved: charSolved,
+        charPools: charPools,
         usedQuestions: usedQuestions,
         buzzer_countdown: useBuzzer ? 3 : 0,
         buzzer_active: !useBuzzer && !isWords4,
@@ -834,16 +894,15 @@ window.startQuizGame = async function() {
     
     // 시간 제한 — 새 차례가 시작될 때만 시계를 다시 맞춘다
     if (mode === 'charades' && (data.charMode || 'count') === 'time') {
-        if (charNewTurn) {
-            updateObj.charEndAt = Date.now() + (data.charTime || 300) * 1000;
-            updateObj.charTimeUp = false;
-        } else {
-            updateObj.charEndAt = data.charEndAt || (Date.now() + (data.charTime || 300) * 1000);
-            updateObj.charTimeUp = false;
-        }
+        updateObj.charEndAt = charNewTurn
+            ? Date.now() + (data.charTime || 300) * 1000
+            : (data.charEndAt || Date.now() + (data.charTime || 300) * 1000);
+        updateObj.charTimeUp = false;
+        updateObj.charOutOfWords = null;
     } else if (mode === 'charades') {
         updateObj.charEndAt = null;
         updateObj.charTimeUp = false;
+        updateObj.charOutOfWords = null;
     }
 
     window.firebaseUpdate(roomRef, updateObj);
