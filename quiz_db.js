@@ -757,7 +757,9 @@ window.QUIZ_DB = {
             {q: "이 사람은 누구일까요?", a: "로버트 다우니 주니어", img: "images/rdj.png"},
             {q: "이 사람은 누구일까요?", a: "일론 머스크", img: "images/elonmusk.png"},
             {q: "이 사람은 누구일까요?", a: "이재명", img: "images/leejaemyung.png"},
-            {q: "이 사람은 누구일까요?", a: "송은이", img: "images/songeuni.png"}
+            {q: "이 사람은 누구일까요?", a: "송은이", img: "images/songeuni.png"},
+            {q: "이 사람은 누구일까요?", a: "마이클 잭슨", img: "images/michael_jackson.png"},
+            {q: "이 사람은 누구일까요?", a: "마이클 조던", img: "images/michael_jordan.png"}
         ],
         '캐릭터 (사진)': [
             {q: "이 캐릭터는 누구일까요?", a: "버터플", img: "images/butterfree.png"},
@@ -785,7 +787,10 @@ window.QUIZ_DB = {
             {q: "이 캐릭터는 누구일까요?", a: "보노보노", img: "images/bonobono.jpg"},
             {q: "이 캐릭터는 누구일까요?", a: "호빵맨", img: "images/anpanman.jpg"},
             {q: "이 캐릭터는 누구일까요?", a: "스누피", img: "images/snoopy.jpg"},
-            {q: "이 캐릭터는 누구일까요?", a: "가필드", img: "images/garfield.jpg"}
+            {q: "이 캐릭터는 누구일까요?", a: "가필드", img: "images/garfield.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "세균맨", img: "images/baikinman.png"},
+            {q: "이 캐릭터는 누구일까요?", a: "카드캡터 체리", img: "images/cherry.png"},
+            {q: "이 캐릭터는 누구일까요?", a: "강백호", img: "images/kangbaekho.png"}
         ],
         랜덤: [
             {q: "이 사람은 누구일까요?", a: "유재석", img: "images/yoo.jpg"},
@@ -837,7 +842,16 @@ window.QUIZ_DB = {
             {q: "이 캐릭터는 누구일까요?", a: "홍두깨", img: "images/hongduggae.png"},
             {q: "이 캐릭터는 누구일까요?", a: "포로리", img: "images/porori.png"},
             {q: "이 캐릭터는 누구일까요?", a: "너부리", img: "images/neoburi.png"},
-            {q: "이 그룹은 누구일까요?", a: "데몬헌터스", img: "images/demonhunters.png"}
+            {q: "이 그룹은 누구일까요?", a: "데몬헌터스", img: "images/demonhunters.png"},
+            {q: "이 캐릭터는 누구일까요?", a: "스폰지밥", img: "images/spongebob.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "펭수", img: "images/pengsoo.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "도라에몽", img: "images/doraemon.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "피카츄", img: "images/pikachu.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "뽀로로", img: "images/pororo.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "보노보노", img: "images/bonobono.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "호빵맨", img: "images/anpanman.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "스누피", img: "images/snoopy.jpg"},
+            {q: "이 캐릭터는 누구일까요?", a: "가필드", img: "images/garfield.jpg"}
         ]
     },
     person_text: {
