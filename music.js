@@ -12,6 +12,14 @@ let playerReady = false;
 let curVid = null;          // 지금 올라가 있는 영상
 let pausedFor = null;       // 어떤 부저 승자 때문에 멈췄는지 (중복 정지 방지)
 
+const TIP_READY = '🆕 새 곡이 올라왔습니다 — <b>▶ 를 눌러</b> 재생하세요';
+const TIP_PLAY  = '<b>재생바를 드래그</b>해 원하는 부분부터 들려줄 수 있습니다';
+
+function setTip(html) {
+    const el = document.getElementById('music-tip');
+    if (el) el.innerHTML = html;
+}
+
 function ensureApi() {
     if (apiPromise) return apiPromise;
     apiPromise = new Promise(resolve => {
@@ -66,12 +74,21 @@ window.musicSync = function (data) {
         if (!player) {
             // 이 div 는 YT.Player 가 iframe 으로 갈아치운다
             st.innerHTML = '<div class="music-frame"><div id="music-player"></div></div>' +
-                           '<div class="music-tip">▶ 를 누르고, <b>재생바를 드래그</b>해 원하는 부분부터 들려주세요</div>';
+                           '<div class="music-tip" id="music-tip">' + TIP_READY + '</div>';
             curVid = data.musicVid || null;
             player = new window.YT.Player('music-player', {
                 videoId: curVid || undefined,
-                playerVars: { playsinline: 1, rel: 0, controls: 1 },
-                events: { onReady: () => { playerReady = true; } }
+                // autoplay: 0 — 곡은 올려만 두고 재생은 사람이 누른다.
+                // 첫 곡이든 다음 곡이든 저절로 나가는 일이 없어야 한다.
+                playerVars: { playsinline: 1, rel: 0, controls: 1, autoplay: 0 },
+                events: {
+                    onReady: () => { playerReady = true; },
+                    onStateChange: (e) => {
+                        const S = window.YT.PlayerState;
+                        if (e.data === S.PLAYING) setTip(TIP_PLAY);
+                        else if (e.data === S.CUED || e.data === S.UNSTARTED) setTip(TIP_READY);
+                    }
+                }
             });
             return;
         }
@@ -82,6 +99,7 @@ window.musicSync = function (data) {
         if (data.musicVid && data.musicVid !== curVid) {
             curVid = data.musicVid;
             pausedFor = null;
+            setTip(TIP_READY);
             try { player.cueVideoById(data.musicVid); } catch (e) {}
             return;
         }
