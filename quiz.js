@@ -129,7 +129,8 @@ window.updateQuiz = function(data) {
             { id: 'charades', name: '몸으로 말해요' },
             { id: 'person_image', name: '인물 퀴즈 (사진)' },
             { id: 'person_text', name: '인물 퀴즈 (스무고개)' },
-            { id: 'proverb_meaning', name: '속담 뜻 맞추기' }
+            { id: 'proverb_meaning', name: '속담 뜻 맞추기' },
+            { id: 'music', name: '🎵 노래 듣고 맞추기' }
             // 🚨 부저만 사용하기 → 로비의 독립 게임으로 옮겼다 (buzzer.js)
         ];
 
@@ -178,15 +179,29 @@ window.updateQuiz = function(data) {
                         </div>
                      </div>`;
 
-            // 부저 설정 — 4글자 이어말하기와 몸으로 말해요는 부저를 쓰지 않는다
+            // 부저 설정 — 4글자 이어말하기와 몸으로 말해요는 부저를 쓰지 않는다.
+            // 노래 듣고 맞추기는 반대로 부저 없이는 성립하지 않아 항상 켜 둔다.
+            const musicMode = selectedMode === 'music';
             if (selectedMode !== 'words4' && selectedMode !== 'charades') {
-                html += `<div style="margin-bottom:15px; text-align:left;">
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" id="quiz-buzzer-toggle" ${buzzerEnabled?'checked':''} onchange="window.toggleBuzzer()">
-                                <span style="color:#cbd5e1; font-size:0.9rem;">🚨 부저 사용</span>
-                            </label>
-                         </div>`;
-                if (buzzerEnabled) {
+                if (musicMode) {
+                    html += `<div style="margin-bottom:15px; text-align:left; background:rgba(59,130,246,0.1); border:1px solid #3b82f6; padding:12px; border-radius:8px;">
+                                <div style="color:#93c5fd; font-size:0.9rem; font-weight:bold;">🚨 부저를 항상 사용합니다</div>
+                                <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.6;">
+                                    노래를 트는 사람 화면에만 유튜브 플레이어가 나옵니다.
+                                    <b style="color:#94a3b8;">재생바를 드래그</b>해서 전주만 들려주거나 후렴부터 틀 수 있습니다.
+                                    누군가 부저를 누르면 노래가 자동으로 멈춥니다.<br>
+                                    소리는 <b style="color:#94a3b8;">트는 사람 기기 한 대</b>에서만 나옵니다. 다 같이 모여서 하세요.
+                                </p>
+                             </div>`;
+                } else {
+                    html += `<div style="margin-bottom:15px; text-align:left;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="quiz-buzzer-toggle" ${buzzerEnabled?'checked':''} onchange="window.toggleBuzzer()">
+                                    <span style="color:#cbd5e1; font-size:0.9rem;">🚨 부저 사용</span>
+                                </label>
+                             </div>`;
+                }
+                if (buzzerEnabled || musicMode) {
                     html += `<div style="margin-bottom:15px; text-align:left; padding-left:20px;">
                                 <label style="display:block; margin-bottom:5px; cursor:pointer;">
                                     <input type="radio" name="buzzer_mode" value="A" ${buzzerMode==='A'?'checked':''} onclick="window.setBuzzerMode('A')">
@@ -201,16 +216,15 @@ window.updateQuiz = function(data) {
                     // 부저는 소리쳐 답하는 방식이라, 정답 여부를 판정할 사람이 필요하다
                     const judge = data.buzzerJudge || '';
                     html += `<div style="margin-bottom:15px; background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:left;">
-                                <h4 style="color:#fbbf24; margin-bottom:6px;">🎭 출제자 (정답 판정)</h4>
+                                <h4 style="color:#fbbf24; margin-bottom:6px;">${musicMode ? '🎧 노래를 트는 사람 (정답 판정)' : '🎭 출제자 (정답 판정)'}</h4>
                                 <select class="input-group input" style="width:100%; padding:9px;" onchange="window.setCharOption('buzzerJudge', this.value)">
-                                    <option value="">— 방장이 판정 —</option>
+                                    <option value="">— 방장이 ${musicMode ? '틀고 판정' : '판정'} —</option>
                                     ${Object.keys(window.players).map(id => `<option value="${id}" ${judge===id?'selected':''}>${window.players[id].name}</option>`).join('')}
                                 </select>
                                 <p style="color:#64748b; font-size:0.78rem; margin-top:6px; line-height:1.5;">
-                                    출제자에게만 정답이 보입니다. 부저를 누른 사람이 소리쳐 답하면
-                                    출제자가 <b style="color:#94a3b8;">⭕ 정답</b> 또는 <b style="color:#94a3b8;">❌ 오답</b> 을 누릅니다.
-                                    오답이면 다른 사람이 다시 누를 수 있습니다.<br>
-                                    출제자는 부저를 누를 수 없습니다.
+                                    ${musicMode
+                                        ? '이 사람 화면에만 플레이어와 정답이 보입니다. 부저를 누른 사람이 소리쳐 답하면 <b style="color:#94a3b8;">⭕ 정답</b> 또는 <b style="color:#94a3b8;">❌ 오답</b> 을 누릅니다.<br>노래를 트는 사람은 답을 알게 되므로 부저를 누를 수 없습니다.'
+                                        : '출제자에게만 정답이 보입니다. 부저를 누른 사람이 소리쳐 답하면 출제자가 <b style="color:#94a3b8;">⭕ 정답</b> 또는 <b style="color:#94a3b8;">❌ 오답</b> 을 누릅니다. 오답이면 다른 사람이 다시 누를 수 있습니다.<br>출제자는 부저를 누를 수 없습니다.'}
                                 </p>
                              </div>`;
                 }
@@ -362,6 +376,19 @@ window.updateQuiz = function(data) {
             }
             else if (mode === 'proverb_meaning') {
                 html += `<h3 style="margin-bottom:15px; line-height:1.5; font-size:1.1rem;">${data.question}</h3>`;
+            }
+            else if (mode === 'music') {
+                // 플레이어 자체는 #quiz-content 바깥(#music-stage)에서 music.js 가 관리한다.
+                // 여기서는 안내만 그린다.
+                const amDJ = typeof window.musicAmDJ === 'function' && window.musicAmDJ(data);
+                html += amDJ
+                    ? `<h3 style="margin-bottom:8px;">🎧 위 플레이어에서 노래를 틀어 주세요</h3>
+                       <p style="color:#94a3b8; font-size:0.85rem; line-height:1.6;">
+                          재생바를 드래그하면 전주만 들려주거나 후렴부터 틀 수 있습니다.<br>
+                          누가 부저를 누르면 자동으로 멈춥니다.
+                       </p>`
+                    : `<h3 style="margin-bottom:8px;">🔊 노래를 듣고 제목을 맞혀 보세요</h3>
+                       <p style="color:#94a3b8; font-size:0.85rem;">알겠으면 부저를 누르고 소리쳐 답하세요</p>`;
             }
             else if (isCharades) {
                 const turnTeam = data.charTeam || 'A';
@@ -518,17 +545,22 @@ window.updateQuiz = function(data) {
                 // === 부저 — '부저만 사용'과 같은 화면(팀 상자 + 이름 앞 램프) ===
                 const judge = data.buzzerJudge && window.players[data.buzzerJudge] ? data.buzzerJudge : null;
                 const amJudge = judge === window.myPlayerId;
+                const isMusic = mode === 'music';
+                // 노래를 트는 사람은 플레이어에 제목이 보이므로 답을 아는 셈이다.
+                // 출제자를 따로 안 정했으면 방장이 그 역할이라, 방장도 부저를 못 누른다.
+                const amDJ = isMusic && (judge ? amJudge : window.isHost);
+                const knowsAnswer = amJudge || amDJ;
 
                 let canPress = true, note = '대기 중';
-                if (amJudge) { canPress = false; note = '🎭 출제자는 못 누릅니다'; }
+                if (knowsAnswer) { canPress = false; note = isMusic ? '🎧 노래를 트는 사람은 못 누릅니다' : '🎭 출제자는 못 누릅니다'; }
                 else if (data.buzzer_mode === 'A' && data.last_buzzer_team === myTeam) {
                     canPress = false;
                     note = '상대 팀 차례입니다';
                 }
 
-                if (amJudge && !data.winner) {
+                if (knowsAnswer && !data.winner) {
                     html += `<div class="card" style="text-align:center; padding:12px; margin-bottom:10px; background:rgba(251,191,36,0.12); border:1px solid #fbbf24;">
-                                <div style="color:#fbbf24; font-size:0.85rem;">🎭 출제자만 보는 정답</div>
+                                <div style="color:#fbbf24; font-size:0.85rem;">${isMusic ? '🎧 트는 사람만 보는 정답' : '🎭 출제자만 보는 정답'}</div>
                                 <div style="font-size:1.6rem; font-weight:900; color:#fff;">${Array.isArray(data.answer) ? data.answer[0] : data.answer}</div>
                              </div>`;
                 }
@@ -553,7 +585,7 @@ window.updateQuiz = function(data) {
                 }
 
                 // 판정은 출제자가 (지정 안 했으면 방장/팀장이)
-                if (data.buzzer_winner && (judge ? amJudge : canControl)) {
+                if (data.buzzer_winner && (judge ? amJudge : (isMusic ? window.isHost : canControl))) {
                     html += `<div class="btn-row" style="margin-top:12px;">
                                 <button class="btn primary" onclick="window.hostBuzzerCorrect('${data.buzzer_winner}')">⭕ 정답</button>
                                 <button class="btn danger" onclick="window.hostBuzzerWrong()">❌ 오답 (다음 사람에게)</button>
@@ -589,6 +621,8 @@ window.updateQuiz = function(data) {
 
     content.innerHTML = html;
     syncCharTimer(data);
+    // 유튜브 플레이어는 #quiz-content 바깥에 있어 이 교체에 살아남는다
+    if (typeof window.musicSync === 'function') window.musicSync(data);
 };
 
 // === SETUP ACTIONS ===
@@ -876,8 +910,10 @@ window.startQuizGame = async function() {
         }
     }
 
-    // 몸으로 말해요는 부저를 쓰지 않는다 — 육성으로 맞히고 출제자가 판정한다
-    const useBuzzer = buzzerEnabled && mode !== 'charades';
+    // 몸으로 말해요는 부저를 쓰지 않는다 — 육성으로 맞히고 출제자가 판정한다.
+    // 노래 듣고 맞추기는 반대로 부저가 없으면 성립하지 않아 설정과 무관하게 켠다.
+    const isMusic = mode === 'music';
+    const useBuzzer = (buzzerEnabled || isMusic) && mode !== 'charades';
     const isWords4 = mode === 'words4';
     const timerSec = data.timer_seconds || 3;
     
@@ -885,6 +921,7 @@ window.startQuizGame = async function() {
         quizState: 'playing', gameMode: mode, category: displayCat,
         question: qData.q, answer: qData.a,
         img: qData.img || null, hints: qData.hints || null,
+        musicVid: qData.vid || null,
         describer: desc || null, winner: null,
         charTeam: charTeam, charCat: charCat, charRot: charRot,
         charIdx: charIdx, charCats: charCats, charSolved: charSolved,
@@ -893,7 +930,7 @@ window.startQuizGame = async function() {
         buzzer_countdown: useBuzzer ? 3 : 0,
         buzzer_active: !useBuzzer && !isWords4,
         buzzer_winner: null, last_buzzer_team: null,
-        buzzer_enabled: buzzerEnabled,
+        buzzer_enabled: buzzerEnabled || isMusic,
         buzzer_mode: data.buzzer_mode || 'A',
         words4_failed: false, words4_timer: isWords4 ? timerSec : 0,
         hintsRevealed: (mode === 'person_text') ? 1 : 0,
@@ -1027,6 +1064,8 @@ window.pressBuzzer = async function() {
 
     const myTeam = (d.globalTeams && d.globalTeams[window.myPlayerId]) || 'A';
     if (d.buzzerJudge === window.myPlayerId) return;   // 출제자는 못 누른다
+    // 노래 듣고 맞추기에서 출제자를 안 정했으면 방장이 노래를 튼다 = 답을 안다
+    if (d.gameMode === 'music' && !d.buzzerJudge && window.isHost) return;
     if (d.buzzer_mode === 'A' && d.last_buzzer_team === myTeam) return;
 
     window.firebaseUpdate(roomRef, { buzzer_winner: window.myPlayerId, buzzer_active: false });
@@ -1092,7 +1131,7 @@ window.backToQuizLobby = function() {
     newQuizRound(); // 진행 중이던 타이머 정리
     if (!window.isHost) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
-        quizState: null, question: null, answer: null, img: null, hints: null,
+        quizState: null, question: null, answer: null, img: null, hints: null, musicVid: null,
         winner: null, buzzer_countdown: 0, buzzer_active: false, buzzer_winner: null,
         last_buzzer_team: null, words4_failed: false, words4_timer: 0,
         hintsRevealed: 0, hintVotes: {}

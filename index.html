@@ -100,7 +100,7 @@
                 <p id="install-hint" style="display:none; margin-top:10px; font-size:0.82rem; color:#94a3b8; line-height:1.6; text-align:left; padding:12px; background:rgba(255,255,255,0.04); border-radius:10px;"></p>
             </div>
 
-            <p style="margin-top:26px; font-size:0.75rem; color:#475569;">ver 3.2</p>
+            <p style="margin-top:26px; font-size:0.75rem; color:#475569;">ver 3.3</p>
         </div>
 
         <!-- 방 만들기 화면 -->
@@ -210,6 +210,10 @@
         <div id="screen-quiz" class="screen">
             <button class="btn-float-back back-to-lobby host-only">◁</button>
             <h2>🎉 단체 게임 모음집</h2>
+            <!-- 노래 듣고 맞추기 플레이어.
+                 #quiz-content 는 신호가 올 때마다 통째로 다시 그려지므로,
+                 되감기지 않도록 반드시 그 바깥에 둔다. (music.js) -->
+            <div id="music-stage" style="display:none;"></div>
             <div id="quiz-content"></div>
         </div>
         <!-- 복불복 미니게임 화면 -->
@@ -240,6 +244,7 @@
     <script src="minigames.js"></script>
     <script src="record.js"></script>
     <script src="buzzer.js"></script>
+    <script src="music.js"></script>
     <script type="module" src="app.js"></script>
     
 </body>

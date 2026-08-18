@@ -973,6 +973,8 @@ function handleStateChange(state, data) {
         if (window._missileRunning && typeof window.stopMissileGame === 'function') window.stopMissileGame(false);
         if (typeof window.closeZombie === 'function') window.closeZombie();
     }
+    // 단체 게임을 벗어나면 유튜브 플레이어를 멈춘다 (안 보이는 곳에서 계속 소리가 나는 것 방지)
+    if (state !== 'quiz' && typeof window.musicStop === 'function') window.musicStop();
     showScreen(state); // 'lobby', 'mafia', 'liar', 'quiz'
     if (state !== 'lobby') {
         // Clear previous game content

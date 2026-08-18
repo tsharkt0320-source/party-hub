@@ -599,6 +599,59 @@ window.QUIZ_DB = {
             {q: "이 인물은 누구일까요?", a: "백종원", hints: ["대한민국 국적","요리연구가 겸 기업인","충청도 사투리","더본코리아 대표","골목식당","슈가보이","아내 소유진"]}
         ]
     },
+    music: {
+        '1990년대': [
+            {q: "🎵 이 노래의 제목은?", a: "신승훈 - 보이지 않는 사랑", vid: "eAnTsZgzW44", year: 1991},
+            {q: "🎵 이 노래의 제목은?", a: "서태지와 아이들 - 난 알아요", vid: "OEDHEzs5kyk", year: 1992},
+            {q: "🎵 이 노래의 제목은?", a: "김건모 - 잘못된 만남", vid: "V4niGzPXIwY", year: 1995},
+            {q: "🎵 이 노래의 제목은?", a: "룰라 - 날개 잃은 천사", vid: "nDpHhFjt5r0", year: 1995},
+            {q: "🎵 이 노래의 제목은?", a: "터보 - 회상", vid: "dPnZgCNcroI", year: 1995},
+            {q: "🎵 이 노래의 제목은?", a: "클론 - 꿍따리 샤바라", vid: "6SrNsoDomho", year: 1996},
+            {q: "🎵 이 노래의 제목은?", a: "H.O.T. - 캔디", vid: "3NUaXU1d-NY", year: 1996},
+            {q: "🎵 이 노래의 제목은?", a: "젝스키스 - 폼생폼사", vid: "4v4PFanJj_U", year: 1997},
+            {q: "🎵 이 노래의 제목은?", a: "DJ DOC - DOC와 춤을", vid: "KTcKdZLxgYU", year: 1997},
+            {q: "🎵 이 노래의 제목은?", a: "S.E.S. - Dreams Come True", vid: "8uiR4SrDGZk", year: 1998},
+            {q: "🎵 이 노래의 제목은?", a: "핑클 - 내 남자친구에게", vid: "sEWWvHKG8_s", year: 1998},
+            {q: "🎵 이 노래의 제목은?", a: "조성모 - To Heaven", vid: "9ld5saQ04tU", year: 1998},
+            {q: "🎵 이 노래의 제목은?", a: "김현정 - 그녀와의 이별", vid: "HVkNzpFat6w", year: 1998},
+            {q: "🎵 이 노래의 제목은?", a: "이정현 - 와", vid: "v1pfRJy5rWA", year: 1999},
+            {q: "🎵 이 노래의 제목은?", a: "god - 어머님께", vid: "efuVbrNLuAk", year: 1999}
+        ],
+        '2000년대': [
+            {q: "🎵 이 노래의 제목은?", a: "god - 거짓말", vid: "I3FHA_qASro", year: 2000},
+            {q: "🎵 이 노래의 제목은?", a: "브라운아이즈 - 벌써 일년", vid: "LZlIqfMn4cc", year: 2001},
+            {q: "🎵 이 노래의 제목은?", a: "이효리 - 10 Minutes", vid: "iKdr44yEBQU", year: 2003},
+            {q: "🎵 이 노래의 제목은?", a: "이수영 - 라라라", vid: "1qoJFYjP2GY", year: 2003},
+            {q: "🎵 이 노래의 제목은?", a: "빅마마 - 체념", vid: "qAlmzxrDHag", year: 2003},
+            {q: "🎵 이 노래의 제목은?", a: "장윤정 - 어머나", vid: "tonkh2XaXrs", year: 2004},
+            {q: "🎵 이 노래의 제목은?", a: "SG워너비 - 살다가", vid: "OEx1wcYIpwM", year: 2005},
+            {q: "🎵 이 노래의 제목은?", a: "버즈 - 겁쟁이", vid: "GSXvwmamkoU", year: 2005},
+            {q: "🎵 이 노래의 제목은?", a: "백지영 - 사랑 안 해", vid: "jN0uXBwKn8w", year: 2006},
+            {q: "🎵 이 노래의 제목은?", a: "원더걸스 - Tell Me", vid: "BlHv3BbBv6A", year: 2007},
+            {q: "🎵 이 노래의 제목은?", a: "빅뱅 - 거짓말", vid: "NeDeZUqNiVo", year: 2007},
+            {q: "🎵 이 노래의 제목은?", a: "동방신기 - 주문 MIROTIC", vid: "HtJS32n6LNQ", year: 2008},
+            {q: "🎵 이 노래의 제목은?", a: "소녀시대 - Gee", vid: "U7mPqycQ0tQ", year: 2009},
+            {q: "🎵 이 노래의 제목은?", a: "2NE1 - I Dont Care", vid: "6aNYmMtlqCw", year: 2009},
+            {q: "🎵 이 노래의 제목은?", a: "슈퍼주니어 - Sorry Sorry", vid: "x6QA3m58DQw", year: 2009}
+        ],
+        '2010년대~2020': [
+            {q: "🎵 이 노래의 제목은?", a: "아이유 - 좋은 날", vid: "jeqdYqsrsA0", year: 2010},
+            {q: "🎵 이 노래의 제목은?", a: "싸이 - 강남스타일", vid: "9bZkp7q19f0", year: 2012},
+            {q: "🎵 이 노래의 제목은?", a: "버스커버스커 - 벚꽃엔딩", vid: "tXV7dfvSefo", year: 2012},
+            {q: "🎵 이 노래의 제목은?", a: "EXO - 으르렁 Growl", vid: "I3dezFzsNss", year: 2013},
+            {q: "🎵 이 노래의 제목은?", a: "씨스타 - Touch My Body", vid: "9txzvu6eQuw", year: 2014},
+            {q: "🎵 이 노래의 제목은?", a: "빅뱅 - 뱅뱅뱅 BANG BANG BANG", vid: "2ips2mM7Zqw", year: 2015},
+            {q: "🎵 이 노래의 제목은?", a: "TWICE - TT", vid: "ePpPVE-GGJw", year: 2016},
+            {q: "🎵 이 노래의 제목은?", a: "볼빨간사춘기 - 우주를 줄게", vid: "9U8uA702xrE", year: 2016},
+            {q: "🎵 이 노래의 제목은?", a: "방탄소년단 - DNA", vid: "MBdVXkSdhwU", year: 2017},
+            {q: "🎵 이 노래의 제목은?", a: "블랙핑크 - 뚜두뚜두 DDU-DU DDU-DU", vid: "IHNzOHi8sJs", year: 2018},
+            {q: "🎵 이 노래의 제목은?", a: "아이콘 - 사랑을 했다 LOVE SCENARIO", vid: "vecSVX1QYbQ", year: 2018},
+            {q: "🎵 이 노래의 제목은?", a: "지코 - 아무노래 Any song", vid: "UuV2BmJ1p_I", year: 2020},
+            {q: "🎵 이 노래의 제목은?", a: "방탄소년단 - Dynamite", vid: "gdZLi9oWNZg", year: 2020},
+            {q: "🎵 이 노래의 제목은?", a: "임영웅 - 이제 나만 믿어요", vid: "kSzraUekkNE", year: 2020}
+        ],
+        랜덤: []
+    },
     proverb_meaning: {
         '속담 뜻 맞추기': [
             {q: "어떤 일이든 시작하기가 어렵지, 일단 시작하면 끝마치기는 쉽다는 뜻", a: "시작이 반이다"},
@@ -632,7 +685,7 @@ window.QUIZ_DB = {
 };
 
 // Initialize Random categories
-['initial', 'words4', 'charades', 'person_image', 'person_text', 'proverb_meaning'].forEach(mode => {
+['initial', 'words4', 'charades', 'person_image', 'person_text', 'proverb_meaning', 'music'].forEach(mode => {
     let all = [];
     Object.keys(window.QUIZ_DB[mode] || {}).forEach(cat => {
         if (cat !== '랜덤') all = all.concat(window.QUIZ_DB[mode][cat]);
