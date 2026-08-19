@@ -977,7 +977,7 @@ window.startQuizGame = async function() {
     // 이 여유가 각자 기기까지 신호가 닿는 시간을 덮어 준다.
     // 짧을수록 경쾌하지만, 신호가 느린 기기가 이 시간 안에 못 받으면
     // 그 사람만 늦게 열려 원래 문제로 돌아간다.
-    const revealAt = window.serverNow() + 600;
+    const revealAt = window.serverNow() + 800;
 
     let updateObj = {
         quizState: 'playing', gameMode: mode, category: displayCat,
