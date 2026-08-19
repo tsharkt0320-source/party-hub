@@ -186,6 +186,25 @@ navBacks.forEach(btn => btn.addEventListener('click', () => {
     history.replaceState(null, null, location.origin + location.pathname);
 }));
 
+// ===== 공용 시계 =====
+// 부저처럼 '모두에게 동시에 열려야' 하는 것에 쓴다.
+//
+// 파이어베이스는 내가 쓴 값을 내 화면에 먼저 반영하고 서버로 보낸다.
+// 그래서 방장이 "지금부터 시작"이라고 쓰면 방장 화면만 즉시 바뀌고
+// 나머지는 서버를 한 번 돌아온 뒤에 바뀐다. 실측 약 178ms 차이.
+//
+// 대신 '언제 열린다'는 시각만 공유하고 카운트다운은 각 기기가 스스로 센다.
+// 기기 시계는 저마다 어긋나 있으므로 서버와의 차이를 받아 보정한다.
+window._serverOffset = 0;
+window.serverNow = function () { return Date.now() + (window._serverOffset || 0); };
+(function watchServerClock() {
+    if (!window.db || !window.firebaseOnValue) { setTimeout(watchServerClock, 300); return; }
+    window.firebaseOnValue(
+        window.firebaseRef(window.db, '.info/serverTimeOffset'),
+        (snap) => { window._serverOffset = snap.val() || 0; }
+    );
+})();
+
 // ===== 홈 화면 앱(PWA) =====
 // 서비스 워커는 캐시를 하지 않는다. 설치 가능 조건을 만족시키는 용도일 뿐이다.
 if ('serviceWorker' in navigator) {
@@ -481,8 +500,9 @@ function unstickRoom(data) {
     if (data.isDrawing) fix.isDrawing = false;
     if (data.isShuffling) fix.isShuffling = false;
     if (data.isCountingDown) { fix.isCountingDown = null; fix.countdownMsg = null; }
-    if (data.buzzer_countdown) { fix.buzzer_countdown = 0; fix.buzzer_active = true; }
-    if (data.bz_countdown) { fix.bz_countdown = 0; fix.bz_active = true; }
+    // 부저는 이제 '열리는 시각'으로 돌아가 스스로 풀린다. 옛 값만 치운다.
+    if (data.buzzer_countdown) fix.buzzer_countdown = 0;
+    if (data.bz_countdown) fix.bz_countdown = 0;
     if (data.words4_timer) fix.words4_timer = 0;
     if (Object.keys(fix).length === 0) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + myRoom), fix);

@@ -575,9 +575,8 @@ window.updateQuiz = function(data) {
 
                 if (typeof window.bzStageHtml === 'function') {
                     html += window.bzStageHtml({
-                        countdown: data.buzzer_countdown || 0,
+                        openAt: data.buzzer_openAt || 0,
                         winner: data.buzzer_winner || null,
-                        active: !!data.buzzer_active,
                         canPress: canPress,
                         note: note,
                         pressFn: 'window.pressBuzzer()'
@@ -927,8 +926,10 @@ window.startQuizGame = async function() {
         charIdx: charIdx, charCats: charCats, charSolved: charSolved,
         charPools: charPools,
         usedQuestions: usedQuestions,
-        buzzer_countdown: useBuzzer ? 3 : 0,
-        buzzer_active: !useBuzzer && !isWords4,
+        // 부저는 '언제 열린다'는 시각만 공유한다 (buzzer.js 의 설명 참고).
+        // 1초마다 숫자를 써서 알리면 방장 화면만 먼저 열려 방장이 유리해진다.
+        buzzer_openAt: useBuzzer ? window.serverNow() + 3000 : 0,
+        buzzer_countdown: 0, buzzer_active: false,   // 옛 값 정리
         buzzer_winner: null, last_buzzer_team: null,
         buzzer_enabled: buzzerEnabled || isMusic,
         buzzer_mode: data.buzzer_mode || 'A',
@@ -953,16 +954,6 @@ window.startQuizGame = async function() {
 
     window.firebaseUpdate(roomRef, updateObj);
 
-    if (useBuzzer) {
-        let c = 3;
-        window._quizBuzzerIv = setInterval(() => {
-            if (window._quizRound !== round) { clearInterval(window._quizBuzzerIv); return; }
-            c--;
-            if (c <= 0) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; window.firebaseUpdate(roomRef, { buzzer_countdown: 0, buzzer_active: true }); }
-            else { window.firebaseUpdate(roomRef, { buzzer_countdown: c }); }
-        }, 1000);
-    }
-    
     if (isWords4) {
         let t = timerSec;
         window._quizWords4Iv = setInterval(() => {
@@ -1056,11 +1047,12 @@ window.submitGuess = async function() {
     }
 };
 
-window.pressBuzzer = async function() {
-    const roomRef = window.firebaseRef(window.db, 'rooms/' + window.myRoom);
-    let snap = await window.firebaseGet(roomRef);
-    let d = snap.val();
-    if (!d.buzzer_active || d.buzzer_winner) return;
+window.pressBuzzer = function() {
+    // 서버에서 방 상태를 다시 읽어 오던 것을 없앴다.
+    // 누를 때마다 왕복이 한 번 더 생겨 그만큼 늦게 도착했다.
+    const d = window._lastRoomData || {};
+    if (d.buzzer_winner) return;                                        // 이미 늦었다
+    if (!d.buzzer_openAt || window.serverNow() < d.buzzer_openAt) return;  // 아직 안 열렸다
 
     const myTeam = (d.globalTeams && d.globalTeams[window.myPlayerId]) || 'A';
     if (d.buzzerJudge === window.myPlayerId) return;   // 출제자는 못 누른다
@@ -1068,7 +1060,13 @@ window.pressBuzzer = async function() {
     if (d.gameMode === 'music' && !d.buzzerJudge && window.isHost) return;
     if (d.buzzer_mode === 'A' && d.last_buzzer_team === myTeam) return;
 
-    window.firebaseUpdate(roomRef, { buzzer_winner: window.myPlayerId, buzzer_active: false });
+    // 동시에 눌러도 서버에 먼저 닿은 한 명만 이긴다.
+    // 그냥 쓰면 나중에 도착한 쪽이 앞사람을 덮어써 더 느린 사람이 이긴다.
+    const me = window.myPlayerId;
+    window.firebaseRunTransaction(
+        window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/buzzer_winner'),
+        (cur) => (cur === null ? me : undefined)
+    );
 };
 
 window.hostBuzzerCorrect = async function(winnerId) {
@@ -1091,7 +1089,13 @@ window.hostBuzzerWrong = async function() {
     const wrongTeam = (d.gameMode === 'charades')
         ? null
         : (d.globalTeams ? d.globalTeams[d.buzzer_winner] : null);
-    window.firebaseUpdate(roomRef, { buzzer_winner: null, buzzer_active: true, last_buzzer_team: wrongTeam });
+    // 오답으로 다시 열 때도 1초를 세고 연다.
+    // 바로 열면 화면이 먼저 갱신된 사람이 또 유리해진다.
+    window.firebaseUpdate(roomRef, {
+        buzzer_winner: null,
+        buzzer_openAt: window.serverNow() + 1000,
+        last_buzzer_team: wrongTeam
+    });
 };
 
 window.voteHint = async function() {
@@ -1132,7 +1136,7 @@ window.backToQuizLobby = function() {
     if (!window.isHost) return;
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
         quizState: null, question: null, answer: null, img: null, hints: null, musicVid: null,
-        winner: null, buzzer_countdown: 0, buzzer_active: false, buzzer_winner: null,
+        winner: null, buzzer_countdown: 0, buzzer_active: false, buzzer_winner: null, buzzer_openAt: 0,
         last_buzzer_team: null, words4_failed: false, words4_timer: 0,
         hintsRevealed: 0, hintVotes: {}
     });

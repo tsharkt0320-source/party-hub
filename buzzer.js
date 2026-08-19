@@ -99,11 +99,16 @@ window.bzTeamBoxesHtml = function(data, opts) {
 };
 
 // 부저를 누르는 자리 (카운트다운 → 버튼 → 누른 사람 표시)
-// o: { countdown, winner, active, canPress, note, pressFn }
-window.bzStageHtml = function(o) {
-    if (o.countdown > 0) {
+// o: { openAt, winner, canPress, note, pressFn }
+//
+// 카운트다운은 서버에서 숫자를 받아 그리지 않는다. 그러면 방장 화면이
+// 먼저 바뀌어 방장만 먼저 누를 수 있게 된다. '언제 열린다'는 시각만
+// 공유하고, 남은 시간은 각 기기가 스스로 계산한다.
+function bzStageInner(o) {
+    const left = o.openAt ? Math.max(0, o.openAt - window.serverNow()) : 0;
+    if (!o.winner && left > 0) {
         return '<div class="bz-stage bz-wait">' +
-                   '<div class="bz-cd">' + o.countdown + '</div>' +
+                   '<div class="bz-cd">' + Math.ceil(left / 1000) + '</div>' +
                    '<div style="color:#94a3b8; font-size:0.85rem;">부저 준비...</div>' +
                '</div>';
     }
@@ -114,10 +119,37 @@ window.bzStageHtml = function(o) {
                    '<div style="color:#fde68a; font-size:0.95rem;">눌렀습니다!</div>' +
                '</div>';
     }
-    if (o.active && o.canPress) {
+    if (o.canPress) {
         return '<button class="bz-press" onclick="' + (o.pressFn || 'window.bzPress()') + '">🚨</button>';
     }
     return '<button class="bz-press" disabled>' + bzEsc(o.note || '대기 중') + '</button>';
+}
+
+// 지금 무엇을 그려야 하는지 나타내는 짧은 값.
+// 이게 바뀔 때만 화면을 갈아끼워 누르는 순간에 버튼이 사라지지 않게 한다.
+function bzStageKey(o) {
+    const left = o.openAt ? Math.max(0, o.openAt - window.serverNow()) : 0;
+    if (!o.winner && left > 0) return 'cd' + Math.ceil(left / 1000);
+    if (o.winner) return 'w' + o.winner;
+    return o.canPress ? 'press' : 'note';
+}
+
+window.bzStageHtml = function(o) {
+    window._bzStageOpts = o;
+    window._bzStageKey = bzStageKey(o);
+    if (!window._bzStageIv) {
+        window._bzStageIv = setInterval(() => {
+            const slot = document.getElementById('bz-stage-slot');
+            const opts = window._bzStageOpts;
+            if (!slot || !opts) return;
+            const k = bzStageKey(opts);
+            if (k === window._bzStageKey) return;
+            window._bzStageKey = k;
+            slot.innerHTML = bzStageInner(opts);
+            // 40ms 간격. 이 간격이 곧 기기 간 오차의 상한이 된다.
+        }, 40);
+    }
+    return '<div id="bz-stage-slot">' + bzStageInner(o) + '</div>';
 };
 
 window.updateBuzzer = function(data) {
@@ -126,8 +158,6 @@ window.updateBuzzer = function(data) {
 
     const mode = (data.bz_mode === 'solo') ? 'solo' : 'team';
     const winner = data.bz_winner || null;
-    const cd = data.bz_countdown || 0;
-    const active = !!data.bz_active;
     const host = !!window.isHost;
     const ids = bzPlayerIds();
     let html = '';
@@ -166,9 +196,8 @@ window.updateBuzzer = function(data) {
 
     // --- 부저 무대 ---
     html += window.bzStageHtml({
-        countdown: cd,
+        openAt: data.bz_openAt || 0,
         winner: winner,
-        active: active,
         canPress: true,
         pressFn: 'window.bzPress()'
     });
@@ -196,29 +225,30 @@ window.bzSetMode = function(mode) {
 
 window.bzPress = function() {
     const d = window._lastRoomData || {};
-    if (!d.bz_active || d.bz_winner) return; // 이미 늦었다
-    window.firebaseUpdate(bzRoomRef(), {
-        bz_winner: window.myPlayerId,
-        bz_active: false
-    });
+    if (d.bz_winner) return;                                   // 이미 늦었다
+    if (!d.bz_openAt || window.serverNow() < d.bz_openAt) return;  // 아직 안 열렸다
+    bzClaim(window.myPlayerId);
 };
+
+// 두 사람이 동시에 눌러도 서버에 먼저 닿은 한 명만 이긴다.
+// 그냥 쓰면 나중에 도착한 쪽이 앞사람을 덮어써서 오히려 느린 사람이 이긴다.
+function bzClaim(id) {
+    window.firebaseRunTransaction(
+        window.firebaseRef(window.db, 'rooms/' + window.myRoom + '/bz_winner'),
+        (cur) => (cur === null ? id : undefined)     // 이미 있으면 포기
+    );
+}
 
 window.bzReset = function() {
     if (!window.isHost) return;
-    const round = bzNewRound();
-    const roomRef = bzRoomRef();
-    window.firebaseUpdate(roomRef, { bz_countdown: 3, bz_active: false, bz_winner: null });
-
-    window._bzIv = setInterval(() => {
-        if (window._bzRound !== round) { clearInterval(window._bzIv); return; }
-        const c = ((window._lastRoomData || {}).bz_countdown || 0) - 1;
-        if (c <= 0) {
-            clearInterval(window._bzIv); window._bzIv = null;
-            window.firebaseUpdate(roomRef, { bz_countdown: 0, bz_active: true });
-        } else {
-            window.firebaseUpdate(roomRef, { bz_countdown: c });
-        }
-    }, 1000);
+    bzNewRound();
+    // 1초마다 숫자를 서버에 써서 알리던 것을 없앴다.
+    // 열리는 시각 하나만 정해 두면 모두가 같은 순간에 열린다.
+    window.firebaseUpdate(bzRoomRef(), {
+        bz_openAt: window.serverNow() + 3000,
+        bz_winner: null,
+        bz_countdown: 0, bz_active: false   // 옛 값 정리
+    });
 };
 
 window.bzScore = function(target, delta) {
