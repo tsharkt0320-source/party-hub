@@ -975,7 +975,9 @@ window.startQuizGame = async function() {
     const timerSec = data.timer_seconds || 3;
     // 모두가 같은 순간에 문제를 보도록 조금 뒤로 잡는다.
     // 이 여유가 각자 기기까지 신호가 닿는 시간을 덮어 준다.
-    const revealAt = window.serverNow() + 1000;
+    // 짧을수록 경쾌하지만, 신호가 느린 기기가 이 시간 안에 못 받으면
+    // 그 사람만 늦게 열려 원래 문제로 돌아간다.
+    const revealAt = window.serverNow() + 600;
 
     let updateObj = {
         quizState: 'playing', gameMode: mode, category: displayCat,
