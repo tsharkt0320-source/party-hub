@@ -7,7 +7,8 @@ window._quizRound = 0;
 function newQuizRound() {
     window._quizRound = (window._quizRound || 0) + 1;
     if (window._quizBuzzerIv) { clearInterval(window._quizBuzzerIv); window._quizBuzzerIv = null; }
-    if (window._quizWords4Iv) { clearInterval(window._quizWords4Iv); window._quizWords4Iv = null; }
+    if (window._w4Iv) { clearInterval(window._w4Iv); window._w4Iv = null; }
+    if (window._quizRevealTo) { clearTimeout(window._quizRevealTo); window._quizRevealTo = null; }
     return window._quizRound;
 }
 window.newQuizRound = newQuizRound;
@@ -351,6 +352,19 @@ window.updateQuiz = function(data) {
         }
     } 
     else if (data.quizState === 'playing') {
+        // 문제가 뜨는 순간도 모두에게 같아야 한다.
+        // 방장 화면은 파이어베이스 응답을 기다리지 않고 먼저 바뀌기 때문에,
+        // 그냥 두면 방장만 문제를 먼저 보고 먼저 외칠 수 있다 (실측 178ms).
+        // 그래서 '언제 보여준다'는 시각을 정해 두고 다 같이 그때 연다.
+        if (data.revealAt && window.serverNow() < data.revealAt) {
+            html += `<div class="card" style="margin-bottom:20px; text-align:center; padding:40px 20px;">
+                        <div style="font-size:2.4rem; font-weight:900; color:#fbbf24;">준비...</div>
+                        <div style="color:var(--text-muted); font-size:0.85rem; margin-top:8px;">곧 문제가 나옵니다</div>
+                     </div>`;
+            content.innerHTML = html;
+            syncQuizReveal(data);
+            return;
+        }
         const mode = data.gameMode;
         const isCharades = mode === 'charades';
         const isWords4 = mode === 'words4';
@@ -450,9 +464,12 @@ window.updateQuiz = function(data) {
                                 ⏰ 실패!
                              </div>
                              <div style="color:var(--text-muted); font-size:1.2rem;">정답: <b>${data.answer}</b></div>`;
-                } else if (data.words4_timer > 0) {
-                    html += `<div style="font-size: 2rem; font-weight: 900; color: ${data.words4_timer <= 1 ? 'var(--danger)' : '#fbbf24'}; margin: 10px 0;">
-                                ⏱ ${data.words4_timer}초
+                } else if (data.words4_endAt && !data.winner) {
+                    // 남은 시간도 각자 계산한다. 방장이 1초마다 숫자를 밀어주면
+                    // 방장 화면만 먼저 줄어들어 시간을 더 쓰게 된다.
+                    const left = Math.max(0, Math.ceil((data.words4_endAt - window.serverNow()) / 1000));
+                    html += `<div id="w4-timer" style="font-size: 2rem; font-weight: 900; color: ${left <= 1 ? 'var(--danger)' : '#fbbf24'}; margin: 10px 0;">
+                                ⏱ ${left}초
                              </div>`;
                 }
             }
@@ -620,9 +637,50 @@ window.updateQuiz = function(data) {
 
     content.innerHTML = html;
     syncCharTimer(data);
+    syncWords4Timer(data);
     // 유튜브 플레이어는 #quiz-content 바깥에 있어 이 교체에 살아남는다
     if (typeof window.musicSync === 'function') window.musicSync(data);
 };
+
+// 공개 시각이 되면 스스로 다시 그린다. 서버가 다시 알려주기를 기다리지 않는다.
+function syncQuizReveal(data) {
+    if (window._quizRevealTo) { clearTimeout(window._quizRevealTo); window._quizRevealTo = null; }
+    const left = (data.revealAt || 0) - window.serverNow();
+    if (left <= 0) return;
+    window._quizRevealTo = setTimeout(() => {
+        window._quizRevealTo = null;
+        if (window._lastRoomData) window.updateQuiz(window._lastRoomData);
+    }, left + 20);
+}
+
+// 이어말하기 제한시간 — 각자 자기 화면에서 센다.
+// 시간이 다 되면 방장만 '실패'를 기록한다 (모두가 쓰면 같은 값을 여러 번 쓴다).
+function syncWords4Timer(data) {
+    if (window._w4Iv) { clearInterval(window._w4Iv); window._w4Iv = null; }
+    if (!data || data.gameMode !== 'words4' || data.quizState !== 'playing') return;
+    if (!data.words4_endAt || data.words4_failed || data.winner) return;
+    const round = window._quizRound;
+    const paint = () => {
+        if (window._quizRound !== round) { clearInterval(window._w4Iv); window._w4Iv = null; return; }
+        const left = Math.max(0, Math.ceil((data.words4_endAt - window.serverNow()) / 1000));
+        const el = document.getElementById('w4-timer');
+        if (el) {
+            el.textContent = '⏱ ' + left + '초';
+            el.style.color = left <= 1 ? 'var(--danger)' : '#fbbf24';
+        }
+        if (left <= 0) {
+            clearInterval(window._w4Iv); window._w4Iv = null;
+            if (window.isHost) {
+                window.firebaseUpdate(
+                    window.firebaseRef(window.db, 'rooms/' + window.myRoom),
+                    { words4_failed: true, words4_endAt: 0 }
+                );
+            }
+        }
+    };
+    paint();
+    window._w4Iv = setInterval(paint, 200);
+}
 
 // === SETUP ACTIONS ===
 window.updateQuizSetup = function() {
@@ -915,7 +973,10 @@ window.startQuizGame = async function() {
     const useBuzzer = (buzzerEnabled || isMusic) && mode !== 'charades';
     const isWords4 = mode === 'words4';
     const timerSec = data.timer_seconds || 3;
-    
+    // 모두가 같은 순간에 문제를 보도록 조금 뒤로 잡는다.
+    // 이 여유가 각자 기기까지 신호가 닿는 시간을 덮어 준다.
+    const revealAt = window.serverNow() + 1000;
+
     let updateObj = {
         quizState: 'playing', gameMode: mode, category: displayCat,
         question: qData.q, answer: qData.a,
@@ -926,14 +987,18 @@ window.startQuizGame = async function() {
         charIdx: charIdx, charCats: charCats, charSolved: charSolved,
         charPools: charPools,
         usedQuestions: usedQuestions,
+        // 문제를 보여줄 시각. 방장 화면만 먼저 바뀌는 것을 막는다.
+        revealAt: revealAt,
         // 부저는 '언제 열린다'는 시각만 공유한다 (buzzer.js 의 설명 참고).
-        // 1초마다 숫자를 써서 알리면 방장 화면만 먼저 열려 방장이 유리해진다.
-        buzzer_openAt: useBuzzer ? window.serverNow() + 3000 : 0,
+        // 문제가 뜬 순간부터 3초를 세도록 공개 시각 뒤에 붙인다.
+        buzzer_openAt: useBuzzer ? revealAt + 3000 : 0,
         buzzer_countdown: 0, buzzer_active: false,   // 옛 값 정리
         buzzer_winner: null, last_buzzer_team: null,
         buzzer_enabled: buzzerEnabled || isMusic,
         buzzer_mode: data.buzzer_mode || 'A',
-        words4_failed: false, words4_timer: isWords4 ? timerSec : 0,
+        // 제한시간도 끝나는 시각으로 준다. 각 기기가 스스로 센다.
+        words4_failed: false, words4_timer: 0,
+        words4_endAt: isWords4 ? revealAt + timerSec * 1000 : 0,
         hintsRevealed: (mode === 'person_text') ? 1 : 0,
         hintVotes: {},
         win_points: winPoints
@@ -954,21 +1019,6 @@ window.startQuizGame = async function() {
 
     window.firebaseUpdate(roomRef, updateObj);
 
-    if (isWords4) {
-        let t = timerSec;
-        window._quizWords4Iv = setInterval(() => {
-            // 다음 문제로 넘어갔거나 이미 정답 처리됐으면 아무것도 쓰지 않는다
-            if (window._quizRound !== round) { clearInterval(window._quizWords4Iv); return; }
-            t--;
-            if (t <= 0) {
-                clearInterval(window._quizWords4Iv);
-                window._quizWords4Iv = null;
-                window.firebaseUpdate(roomRef, { words4_timer: 0, words4_failed: true });
-            } else {
-                window.firebaseUpdate(roomRef, { words4_timer: t });
-            }
-        }, 1000);
-    }
 };
 
 window.getEditDistance = function(a, b) {
@@ -1039,7 +1089,7 @@ window.submitGuess = async function() {
         indScores[window.myPlayerId] = (indScores[window.myPlayerId] || 0) + pts;
         gScores[window.myPlayerId] = (gScores[window.myPlayerId] || 0) + pts;
         newQuizRound(); // 정답이 나왔으니 남은 제한시간 타이머 무효화
-        window.firebaseUpdate(roomRef, { winner: window.myPlayerId, individualScores: indScores, globalScores: gScores, words4_timer: 0 });
+        window.firebaseUpdate(roomRef, { winner: window.myPlayerId, individualScores: indScores, globalScores: gScores, words4_endAt: 0 });
     } else {
         alert("틀렸습니다! 다시 시도하세요.");
         input.value = '';
@@ -1137,7 +1187,7 @@ window.backToQuizLobby = function() {
     window.firebaseUpdate(window.firebaseRef(window.db, 'rooms/' + window.myRoom), {
         quizState: null, question: null, answer: null, img: null, hints: null, musicVid: null,
         winner: null, buzzer_countdown: 0, buzzer_active: false, buzzer_winner: null, buzzer_openAt: 0,
-        last_buzzer_team: null, words4_failed: false, words4_timer: 0,
+        last_buzzer_team: null, words4_failed: false, words4_timer: 0, words4_endAt: 0, revealAt: 0,
         hintsRevealed: 0, hintVotes: {}
     });
 };
